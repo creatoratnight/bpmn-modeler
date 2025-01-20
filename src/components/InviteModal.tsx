@@ -19,7 +19,7 @@ const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
         }).then(() => {
             toastr.success('Invitation sent');
             onClose();
-            setInviteEmail(''); // Reset the email input field
+            setInviteEmail('');
         }).catch(error => {
             toastr.error('Error sending invitation:', error);
         });

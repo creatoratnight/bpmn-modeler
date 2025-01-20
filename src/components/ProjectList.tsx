@@ -90,7 +90,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 members: {
-                    [user.uid]: 'owner' // Assigning the role of 'owner' to the user who created the project
+                    [user.uid]: 'owner'
                 }
             }).then(() => {
                 toastr.success('New project added successfully');
@@ -402,7 +402,6 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
 
             setProjects(userProjects);
         } else {
-            // Handle the case where the user has no projects
             setProjects([]);
         }
     };
