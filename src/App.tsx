@@ -244,8 +244,9 @@ function App() {
           {viewMode === 'DMN' && user && <DMNModelerComponent xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
           {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
           {!user && <div className="welcome-wrapper">
+                <img src="/bpmn_modeler_logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
               <div className="welcome-title">
-                  Welcome to Designer!
+                  Welcome to BPMN Modeler!
               </div>
               <div className="welcome-subtitle">
                   the open-source BPMN & DMN modeling collaboration tool
