@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getDatabase, ref, set, child, get } from 'firebase/database';
 
 const firebaseConfig = {
@@ -16,5 +16,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 const auth = getAuth(app);
+const microsoftProvider = new OAuthProvider('microsoft.com');
 
-export { auth, GoogleAuthProvider, signInWithPopup };
+export { auth, GoogleAuthProvider, microsoftProvider, signInWithPopup };

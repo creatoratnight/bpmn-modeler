@@ -2,7 +2,7 @@ import './App.css'
 import BPMNModelerComponent from "./components/BpmnModeler.tsx";
 import {auth} from './config/.firebase.js';
 import {saveBPMNModel, saveDMNodel} from './services/models.service.tsx'
-import {signInWithGoogle, logout} from './services/user.service.tsx';
+import {signInWithGoogle, signInWithMicrosoft, logout} from './services/user.service.tsx';
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from "react";
 import ProjectList from "./components/ProjectList.tsx";
@@ -12,6 +12,9 @@ import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Tile} from '@carbon/react';
 import {Save, Login} from '@carbon/react/icons';
+import { child, get, getDatabase, ref } from 'firebase/database';
+import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
+import config from './config/config';
 
 function App() {
     const [user, setUser] = useState(null);
@@ -22,6 +25,7 @@ function App() {
     const [viewPosition, setViewPosition] = useState(null);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+    const [userAvatar, setUserAvatar] = useState('user.png');
 
     toastr.options = {
         closeButton: false,
@@ -42,12 +46,22 @@ function App() {
     };
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 // User is signed in, see docs for a list of available properties
                 // https://firebase.google.com/docs/reference/js/firebase.User
                 setUser(user);
                 setViewMode('ALL_PROJECTS');
+
+                // Fetch user avatar from the database
+                const db = getDatabase();
+                const userRef = ref(db, 'users/' + user.uid);
+                const snapshot = await get(child(userRef, '/'));
+                if (snapshot.exists()) {
+                    const userData = snapshot.val();
+                    console.log('User data fetched from the database.', userData);
+                    setUserAvatar(userData.imageUrl || 'user.png');
+                }
             } else {
                 // User is signed out
                 setUser(null);
@@ -208,11 +222,18 @@ function App() {
               </div>
               <div className="header-user">
                   {!user &&
-                      <Button size="sm" onClick={signInWithGoogle}><Login className="project-name-icon"/>Sign in with Google</Button>
+                    <div className="header-user-sign-in">
+                      {config.enableGoogleSignIn && (
+                        <Button size="sm" onClick={signInWithGoogle}><FaGoogle className="project-name-icon"/>Sign in with Google</Button>
+                      )}
+                      {config.enableMicrosoftSignIn && (
+                        <Button size="sm" onClick={signInWithMicrosoft}><FaMicrosoft className="project-name-icon"/>Sign in with Microsoft</Button>
+                      )}
+                    </div>
                   }
                   {user &&
                       <div className="header-user-signed-in">
-                          <img src={user.photoURL} alt="user-avatar" style={{
+                          <img src={userAvatar} alt="user-avatar" style={{
                               width: '32px',
                               height: '32px',
                               borderRadius: '16px'
@@ -253,7 +274,7 @@ function App() {
               </div>
           </div>}
           {(viewMode !== 'BPMN' && viewMode !== 'DMN') && <Tile className="footer">
-              Version: 0.2.2 - powered by <a href="https://www.valtimo.nl" target="valtimo">Valtimo</a>
+              Version: {config.bpmnModelerVersion} - powered by <a href="https://www.valtimo.nl" target="valtimo">Valtimo</a>
           </Tile>}
       </div>
     )
