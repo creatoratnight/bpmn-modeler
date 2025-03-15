@@ -37,6 +37,7 @@
 }
 
 .project-name-icon {
+  margin-top: 2px;
   margin-right: 8px;
 }
 
@@ -117,6 +118,12 @@ h2, h3, h4 {
   justify-content: flex-end;
   font-size: 14px;
   color: #002f61;
+}
+
+.header-user-sign-in {
+  min-width: min-content;
+  display: flex;
+  gap: 12px;
 }
 
 .header-user-signed-in {
