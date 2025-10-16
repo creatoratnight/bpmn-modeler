@@ -284,6 +284,10 @@ function App() {
               <Button onClick={() => onSaveModelClick(model)} className="save-button">
                   <Save className="project-name-icon"/> Save
               </Button>}
+            {viewMode === 'BPMN' && !changes &&
+              <Button onClick={() => onSaveModelClick(model)} className="save-button" disabled>
+                  <Save className="project-name-icon"/> Save
+              </Button>}
           {viewMode === 'BPMN' &&
               <Button onClick={onDownloadAsPng} className="download-png-button">
                   <PNG className="project-name-icon"/> Download PNG
