@@ -197,9 +197,9 @@ function App() {
                 const image = new Image();
 
                 image.onload = () => {
-                    canvas.width = image.width;
-                    canvas.height = image.height;
-                    context.drawImage(image, 0, 0);
+                    canvas.width = image.width * 1.5;
+                    canvas.height = image.height * 1.5;
+                    context.drawImage(image, 0, 0, image.width * 1.5, image.height * 1.5);
 
                     const pngUrl = canvas.toDataURL('image/png');
                     const link = document.createElement('a');
