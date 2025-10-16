@@ -14,6 +14,7 @@
     "axios": "^1.8.3",
     "base64-arraybuffer": "^1.0.2",
     "bpmn-js": "^17.0.2",
+    "bpmn-js-color-picker": "^0.7.2",
     "dmn-js": "^15.1.0",
     "firebase": "^10.8.0",
     "react": "^18.2.0",
