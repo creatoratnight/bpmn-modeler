@@ -15,6 +15,8 @@ import {Save, Login, Download, Image as PNG} from '@carbon/react/icons';
 import { child, get, getDatabase, ref } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
+import {downloadXmlAsBpmn} from './services/utils.service.tsx';
+
 
 function App() {
     const [user, setUser] = useState(null);
@@ -280,6 +282,8 @@ function App() {
                   }
               </div>
           </Tile>
+          {viewMode === ('BPMN' || 'DMN') &&
+          <div className="modeler-toolbar-background"></div>}
           {viewMode === 'BPMN' && changes &&
               <Button onClick={() => onSaveModelClick(model)} className="save-button">
                   <Save className="project-name-icon"/> Save
@@ -288,9 +292,13 @@ function App() {
               <Button onClick={() => onSaveModelClick(model)} className="save-button" disabled>
                   <Save className="project-name-icon"/> Save
               </Button>}
+            {viewMode === 'BPMN' &&
+              <Button onClick={() => downloadXmlAsBpmn(model)} className="download-bpmn-button">
+                  <Download className="project-name-icon"/> Download BPMN
+              </Button>}
           {viewMode === 'BPMN' &&
               <Button onClick={onDownloadAsPng} className="download-png-button">
-                  <PNG className="project-name-icon"/> Download PNG
+                  <PNG className="project-name-icon"/> Download image
               </Button>}
           {viewMode === 'DMN' &&
               <Button onClick={() => onSaveDMNClick(model)} className="save-button">
