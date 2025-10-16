@@ -600,4 +600,15 @@ a {
   display: none;
 }
 
+.modeler-toolbar-background {
+  height: 48px;
+  width: 100%;
+  background-color: #efefef;
+  // border-bottom: 1px solid #ddd;
+  position: absolute;
+  top: 64px;
+  left: 0;
+;
+}
+
 /* END: Carbon Design System overrides */

@@ -27,7 +27,7 @@ import {
     extractBpmnProcessName,
     extractDmnTableName,
     camelize,
-    toKebabCase,
+    downloadXmlAsBpmn,
     convertDateString,
     renderMembersCell,
     sortRows
@@ -340,16 +340,6 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
 
     const handleUploadButtonClick = () => {
         fileInputRef.current.click();
-    };
-
-    const downloadXmlAsBpmn = (model) => {
-        const element = document.createElement("a");
-        const file = new Blob([model.xmlData], {type: 'text/xml'});
-        element.href = URL.createObjectURL(file);
-        element.download = model.type === 'bpmn' ? toKebabCase(extractBpmnProcessName(model.xmlData) || model.name) + '.bpmn' : toKebabCase(extractDmnTableName(model.xmlData) || model.name) + '.dmn';
-        document.body.appendChild(element); // Required for this to work in FireFox
-        element.click();
-        document.body.removeChild(element);
     };
 
     const fetchUserProjects = async (userId) => {
