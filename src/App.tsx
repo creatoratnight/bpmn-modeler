@@ -234,7 +234,7 @@ function App() {
               </div>
               <div className="header-nav">
                   {user && <div className="nav-projects-folder" onClick={onMyProjectsNavClick}>
-                      My Projects
+                      Projects
                   </div>}
                   {project.name && <div>
                       &#8594;
@@ -288,17 +288,27 @@ function App() {
               <Button onClick={() => onSaveModelClick(model)} className="save-button">
                   <Save className="project-name-icon"/> Save
               </Button>}
+            {viewMode === 'BPMN' &&
+                <Button
+                    onClick={() => downloadXmlAsBpmn(model)}
+                    className="download-bpmn-button"
+                    hasIconOnly
+                    renderIcon={Download}
+                    iconDescription="Download BPMN"
+                    tooltipPosition="right"
+                />}
+            {viewMode === 'BPMN' &&
+                <Button
+                    onClick={onDownloadAsPng}
+                    className="download-png-button"
+                    hasIconOnly
+                    renderIcon={PNG}
+                    iconDescription="Download as image"
+                    tooltipPosition="right"
+                />}
             {viewMode === 'BPMN' && !changes &&
               <Button onClick={() => onSaveModelClick(model)} className="save-button" disabled>
                   <Save className="project-name-icon"/> Save
-              </Button>}
-            {viewMode === 'BPMN' &&
-              <Button onClick={() => downloadXmlAsBpmn(model)} className="download-bpmn-button">
-                  <Download className="project-name-icon"/> Download BPMN
-              </Button>}
-          {viewMode === 'BPMN' &&
-              <Button onClick={onDownloadAsPng} className="download-png-button">
-                  <PNG className="project-name-icon"/> Download image
               </Button>}
           {viewMode === 'DMN' &&
               <Button onClick={() => onSaveDMNClick(model)} className="save-button">
