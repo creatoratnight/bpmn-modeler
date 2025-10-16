@@ -1,15 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import BpmnModeler from 'bpmn-js/lib/Modeler';
 import BpmnColorPickerModule from 'bpmn-js-color-picker';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 
 
-const BPMNModelerComponent = ({ xml, viewPosition, onModelChange, onViewPositionChange }) => {
+const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onViewPositionChange }, ref) => {
     const modelerRef = useRef(null);
+    const modelerInstance = useRef(null);
 
     useEffect(() => {
-        const modeler = new BpmnModeler({
+        modelerInstance.current = new BpmnModeler({
             container: modelerRef.current,
             keyboard: {
                 bindTo: window,
@@ -19,22 +20,22 @@ const BPMNModelerComponent = ({ xml, viewPosition, onModelChange, onViewPosition
             ]
         });
 
-        modeler.importXML(xml).then(() => {
+        modelerInstance.current.importXML(xml).then(() => {
             if (viewPosition) {
-                setViewPosition(modeler);
+                setViewPosition(modelerInstance.current);
             }
         });
 
-        modeler.on('canvas.viewbox.changed', () => {
-            const viewbox = getViewPosition(modeler);
+        modelerInstance.current.on('canvas.viewbox.changed', () => {
+            const viewbox = getViewPosition(modelerInstance.current);
             if (viewPosition !== viewbox) {
                 onViewPositionChange(viewbox);
             }
         });
 
-        modeler.on(['commandStack.changed'], async () => {
+        modelerInstance.current.on(['commandStack.changed'], async () => {
             try {
-                const { xml } = await modeler.saveXML({ format: true });
+                const { xml } = await modelerInstance.current.saveXML({ format: true });
                 onModelChange(xml);
             } catch (err) {
                 console.error('Error saving XML', err);
@@ -42,9 +43,15 @@ const BPMNModelerComponent = ({ xml, viewPosition, onModelChange, onViewPosition
         });
 
         return () => {
-            modeler.destroy();
+            modelerInstance.current.destroy();
         };
     }, []);
+
+    useImperativeHandle(ref, () => ({
+        saveSVG: () => {
+            return modelerInstance.current.saveSVG();
+        }
+    }));
 
     function getViewPosition(modeler) {
         const canvas = modeler.get('canvas');
@@ -69,6 +76,6 @@ const BPMNModelerComponent = ({ xml, viewPosition, onModelChange, onViewPosition
     }
 
     return <div ref={modelerRef} className="bpmn-modeler" />;
-};
+});
 
 export default BPMNModelerComponent;

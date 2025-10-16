@@ -4,14 +4,14 @@ import {auth} from './config/.firebase.js';
 import {saveBPMNModel, saveDMNodel} from './services/models.service.tsx'
 import {signInWithGoogle, signInWithMicrosoft, logout} from './services/user.service.tsx';
 import { onAuthStateChanged } from 'firebase/auth';
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import ProjectList from "./components/ProjectList.tsx";
 import SaveModal from "./components/SaveModal.tsx";
 import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Tile} from '@carbon/react';
-import {Save, Login} from '@carbon/react/icons';
+import {Save, Login, Download, Image as PNG} from '@carbon/react/icons';
 import { child, get, getDatabase, ref } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
@@ -26,6 +26,7 @@ function App() {
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [userAvatar, setUserAvatar] = useState('user.png');
+    const bpmnModelerRef = useRef(null);
 
     toastr.options = {
         closeButton: false,
@@ -185,6 +186,32 @@ function App() {
         setViewMode('ALL_PROJECTS');
     }
 
+    const onDownloadAsPng = async () => {
+        if (bpmnModelerRef.current) {
+            try {
+                const { svg } = await bpmnModelerRef.current.saveSVG();
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                const image = new Image();
+
+                image.onload = () => {
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    context.drawImage(image, 0, 0);
+
+                    const pngUrl = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.download = `${model.name || 'diagram'}.png`; // TODO: Implement versioning in file name
+                    link.href = pngUrl;
+                    link.click();
+                };
+                image.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+            } catch (err) {
+                toastr.error('Could not save BPMN diagram as PNG.', err);
+            }
+        }
+    };
+
     return (
       <div className="App">
           {model && <SaveModal
@@ -255,13 +282,17 @@ function App() {
           </Tile>
           {viewMode === 'BPMN' && changes &&
               <Button onClick={() => onSaveModelClick(model)} className="save-button">
-                  <Save className="project-name-icon"/> Save Model
+                  <Save className="project-name-icon"/> Save
+              </Button>}
+          {viewMode === 'BPMN' &&
+              <Button onClick={onDownloadAsPng} className="download-png-button">
+                  <PNG className="project-name-icon"/> Download PNG
               </Button>}
           {viewMode === 'DMN' &&
               <Button onClick={() => onSaveDMNClick(model)} className="save-button">
-                  Save Model
+                  Save
               </Button>}
-          {viewMode === 'BPMN' && user && <BPMNModelerComponent xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
+          {viewMode === 'BPMN' && user && <BPMNModelerComponent ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
           {viewMode === 'DMN' && user && <DMNModelerComponent xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
           {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
           {!user && <div className="welcome-wrapper">
