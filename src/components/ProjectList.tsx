@@ -22,7 +22,7 @@ import {
     TableToolbar,
     TableToolbarContent, Tile
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -56,6 +56,12 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
     const [sortHeader, setSortHeader] = useState('');
     const [sortHeaderModels, setSortHeaderModels] = useState('');
 
+    const [isMembersPanelOpen, setIsMembersPanelOpen] = useState(() => {
+        const savedState = localStorage.getItem('isMembersPanelOpen');
+        // Defaults to false if nothing is in localStorage
+        return savedState ? JSON.parse(savedState) : false;
+    });
+
     const fileInputRef = useRef(null);
 
     // Fetch projects when component mounts or userId changes
@@ -67,6 +73,11 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
     useEffect(() => {
         onOpenProject(projects.filter((project) => project.id === currentProject.id)[0]);
     }, [projects])
+
+    // Save side panel state to localStorage
+    useEffect(() => {
+        localStorage.setItem('isMembersPanelOpen', JSON.stringify(isMembersPanelOpen));
+    }, [isMembersPanelOpen]);
 
     const handleAddProject = (newProjectName) => {
         if (newProjectName) {
@@ -795,89 +806,102 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                     )}
                                 />
                             </div>
-                            <div className="project-members-wrapper">
-                                <DataTable
-                                    rows={currentProject.members.map((member) => ({
-                                        id: member.id,
-                                        avatar: member.imageUrl,
-                                        name: <div
-                                            title={`${member.displayName} (${member.role}) ${member.email}`}>{member.displayName}</div>,
-                                        email: member.email,
-                                        role: member.role,
-                                        actions: member,
-                                    }))}
-                                    headers={[
-                                        {key: 'avatar', header: ''}, // For avatar images
-                                        {key: 'name', header: 'Name'},
-                                        {key: 'role', header: 'Role'},
-                                        {key: 'actions', header: 'Options'}, // For action buttons
-                                    ]}
-                                    render={({rows, headers, getHeaderProps, getRowProps}) => (
-                                        <TableContainer title="Members">
-                                            <TableToolbar>
-                                                <TableToolbarContent>
-                                                    <div className="cds--toolbar-title">
-                                                        Members
-                                                    </div>
-                                                    <Button onClick={() => {
-                                                        setIsInviteModalOpen(true);
-                                                        setSelectedProjectId(currentProject.id);
-                                                    }}><UserFollow className="project-name-icon"/> Invite Member
-                                                    </Button>
-                                                </TableToolbarContent>
-                                            </TableToolbar>
-                                            <Table>
-                                            <TableHead>
-                                                    <TableRow>
-                                                        {headers.map((header) => (
-                                                            <TableHeader {...getHeaderProps({header})}>
-                                                                {header.header}
-                                                            </TableHeader>
-                                                        ))}
-                                                    </TableRow>
-                                                </TableHead>
-                                                <TableBody>
-                                                    {rows.map((row) => (
-                                                        <TableRow key={row.id} {...getRowProps({row})}>
-                                                            {row.cells.map((cell) => (
-                                                                <TableCell key={cell.id}>
-                                                                    {cell.info.header === 'avatar' ? (
-                                                                        <img src={cell.value} alt="user-avatar" style={{
-                                                                            width: '32px',
-                                                                            height: '32px',
-                                                                            borderRadius: '16px'
-                                                                        }}/>
-                                                                    ) : cell.info.header === 'actions' && currentProject.ownerId === user.uid && cell.value.id !== user.uid ? (
-                                                                        <OverflowMenu flipped>
-                                                                            <OverflowMenuItem
-                                                                                itemText="Remove member"
-                                                                                isDelete
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation(); // Prevent triggering row onClick
-                                                                                    openConfirmModal(
-                                                                                        `Are you sure you want to remove ${cell.value.displayName} from this project?`,
-                                                                                        () => handleRemoveMember(currentProject.id, cell.value.id)
-                                                                                    );
-                                                                                }}
-                                                                            />
-                                                                        </OverflowMenu>
-                                                                    ) : cell.info.header === 'name' ? (
-                                                                        cell.value
-                                                                    ) : cell.info.header === 'role' ? (
-                                                                        cell.value
-                                                                    ) : (
-                                                                        <></>
-                                                                    )}
-                                                                </TableCell>
+                            {!isMembersPanelOpen && (
+                                <Button
+                                    className="open-members-panel-button"
+                                    onClick={() => setIsMembersPanelOpen(true)}
+                                    hasIconOnly
+                                    renderIcon={Group}
+                                    iconDescription="Open members panel"
+                                    size="lg"
+                                />
+                            )}
+                            {isMembersPanelOpen &&
+                                <div className="project-members-wrapper">
+                                    <DataTable
+                                        rows={currentProject.members.map((member) => ({
+                                            id: member.id,
+                                            avatar: member.imageUrl,
+                                            name: member.displayName,
+                                            email: member.email,
+                                            role: member.role,
+                                            actions: member,
+                                        }))}
+                                        headers={[
+                                            {key: 'avatar', header: ''}, // For avatar images
+                                            {key: 'name', header: 'Name'},
+                                            {key: 'role', header: 'Role'},
+                                            {key: 'actions', header: 'Options'}, // For action buttons
+                                        ]}
+                                        render={({rows, headers, getHeaderProps, getRowProps}) => (
+                                            <TableContainer title="Members">
+                                                <TableToolbar>
+                                                    <TableToolbarContent>
+                                                        <div className="cds--toolbar-title">
+                                                            Members
+                                                        </div>
+                                                        <Button onClick={() => {
+                                                            setIsInviteModalOpen(true);
+                                                            setSelectedProjectId(currentProject.id);
+                                                        }}><UserFollow className="project-name-icon"/> Invite
+                                                        </Button>
+                                                        <Button hasIconOnly kind="ghost" renderIcon={Close} iconDescription="Close panel" tooltipPosition="left" onClick={() => setIsMembersPanelOpen(false)} />
+                                                    </TableToolbarContent>
+                                                </TableToolbar>
+                                                <Table>
+                                                    <TableHead>
+                                                        <TableRow>
+                                                            {headers.map((header) => (
+                                                                <TableHeader {...getHeaderProps({header})}>
+                                                                    {header.header}
+                                                                </TableHeader>
                                                             ))}
                                                         </TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </TableContainer>
-                                    )}
-                                />
-                            </div>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                        {rows.map((row) => (
+                                                            <TableRow key={row.id} {...getRowProps({row})}>
+                                                                {row.cells.map((cell) => (
+                                                                    <TableCell key={cell.id}>
+                                                                        {cell.info.header === 'avatar' ? (
+                                                                            <img src={cell.value} alt="user-avatar"
+                                                                                    style={{
+                                                                                        width: '32px',
+                                                                                        height: '32px',
+                                                                                        borderRadius: '16px'
+                                                                                    }}/>
+                                                                        ) : cell.info.header === 'actions' && currentProject.ownerId === user.uid && cell.value.id !== user.uid ? (
+                                                                            <OverflowMenu flipped>
+                                                                                <OverflowMenuItem
+                                                                                    itemText="Remove member"
+                                                                                    isDelete
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation(); // Prevent triggering row onClick
+                                                                                        openConfirmModal(
+                                                                                            `Are you sure you want to remove ${cell.value.displayName} from this project?`,
+                                                                                            () => handleRemoveMember(currentProject.id, cell.value.id)
+                                                                                        );
+                                                                                    }}
+                                                                                />
+                                                                            </OverflowMenu>
+                                                                        ) : cell.info.header === 'name' ? (
+                                                                            cell.value
+                                                                        ) : cell.info.header === 'role' ? (
+                                                                            cell.value
+                                                                        ) : (
+                                                                            <></>
+                                                                        )}
+                                                                    </TableCell>
+                                                                ))}
+                                                            </TableRow>
+                                                        ))}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                        )}
+                                    />
+                                </div>
+                            };
                         </div>
                     </>}
             </div>
