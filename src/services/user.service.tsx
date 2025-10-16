@@ -72,7 +72,7 @@ export const logout = async () => {
 };
 
 export const signInWithMicrosoft = async () => {
-    try {
+    try { // TODO: try signInWithRedirect instead of signInWithPopup
         const result = await signInWithPopup(auth, microsoftProvider);
         const user = result.user;
         console.log('Successfully signed in with Microsoft: ', user);

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import BpmnModeler from 'bpmn-js/lib/Modeler';
+import BpmnColorPickerModule from 'bpmn-js-color-picker';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 
@@ -13,6 +14,9 @@ const BPMNModelerComponent = ({ xml, viewPosition, onModelChange, onViewPosition
             keyboard: {
                 bindTo: window,
             },
+            additionalModules: [
+                BpmnColorPickerModule
+            ]
         });
 
         modeler.importXML(xml).then(() => {
