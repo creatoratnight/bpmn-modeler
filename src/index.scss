@@ -148,9 +148,7 @@ h2, h3, h4 {
 }
 
 .save-button {
-  position: absolute;
-  top: 64px;
-  right: 0;
+  float: right;
   pointer-events: all;
   z-index: 99999;
 }

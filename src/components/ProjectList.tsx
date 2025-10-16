@@ -562,7 +562,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                     <>
                         <div className="project-heading">
                             <Heading>
-                                My Projects
+                                Projects
                             </Heading>
                         </div>
                         <br/><br/>
