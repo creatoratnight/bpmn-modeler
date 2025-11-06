@@ -22,7 +22,7 @@ import {
     TableToolbar,
     TableToolbarContent, Tile
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -591,6 +591,23 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                         </TableToolbarContent>
                                     </TableToolbar>
                                     <Table>
+                                        {rows.length === 0 && (
+                                            <TableBody>
+                                                <TableRow>
+                                                    <TableCell colSpan={headers.length}>
+                                                        <div style={{ textAlign: 'center', padding: '50px' }}>
+                                                            <Folder size={64} style={{ fill: '#8d8d8d' }} />
+                                                            <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>
+                                                                No projects yet. Click "Add Project" to get started.
+                                                            </p>
+                                                            <br/><br/>
+                                                            <Button onClick={() => setIsAddProjectModalOpen(true)}><Add
+                                                                className="project-name-icon"/> Add Project</Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        )}
                                         <TableHead>
                                             <TableRow>
                                                 {headers.map(header => (
@@ -721,6 +738,26 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                 </TableToolbarContent>
                                             </TableToolbar>
                                             <Table>
+                                                {rows.length === 0 && (
+                                                    <TableBody>
+                                                        <TableRow>
+                                                            <TableCell colSpan={headers.length}>
+                                                                <div style={{ textAlign: 'center', padding: '50px' }}>
+                                                                    <DecisionTree size={64} style={{ fill: '#8d8d8d' }} />
+                                                                    <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>
+                                                                        No models in this project. Add or import a model to begin.
+                                                                    </p>
+                                                                    <br/><br/>
+                                                                    <Button onClick={() => {
+                                                                        setIsAddModelModalOpen(true);
+                                                                        setSelectedProjectId(currentProject.id);
+                                                                    }}><DecisionTree className="project-name-icon"/> Add BPMN
+                                                                    </Button>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    </TableBody>
+                                                )}
                                                 <TableHead>
                                                     <TableRow>
                                                         {headers.map(header => (
@@ -845,7 +882,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                             setSelectedProjectId(currentProject.id);
                                                         }}><UserFollow className="project-name-icon"/> Invite
                                                         </Button>
-                                                        <Button hasIconOnly kind="ghost" renderIcon={Close} iconDescription="Close panel" tooltipPosition="left" onClick={() => setIsMembersPanelOpen(false)} />
+                                                        <Button hasIconOnly kind="ghost" renderIcon={Close} iconDescription="Close members panel" tooltipPosition="top" onClick={() => setIsMembersPanelOpen(false)} />
                                                     </TableToolbarContent>
                                                 </TableToolbar>
                                                 <Table>
@@ -896,6 +933,26 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                             </TableRow>
                                                         ))}
                                                     </TableBody>
+                                                    {rows.length === 1 && (
+                                                        <TableBody>
+                                                            <TableRow>
+                                                                <TableCell colSpan={headers.length}>
+                                                                    <div style={{ textAlign: 'center', padding: '50px' }}>
+                                                                        <UserFollow size={64} style={{ fill: '#8d8d8d' }} />
+                                                                        <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>
+                                                                            You are the only member. Invite others to collaborate.
+                                                                        </p>
+                                                                        <br/><br/>
+                                                                        <Button onClick={() => {
+                                                                            setIsInviteModalOpen(true);
+                                                                            setSelectedProjectId(currentProject.id);
+                                                                        }}><UserFollow className="project-name-icon"/> Invite
+                                                                        </Button>
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        </TableBody>
+                                                    )}
                                                 </Table>
                                             </TableContainer>
                                         )}
