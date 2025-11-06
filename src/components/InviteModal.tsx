@@ -31,7 +31,7 @@ const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
         <Modal modalHeading="Invite Member" primaryButtonText="Invite member" secondaryButtonText="Cancel" open={isOpen} onRequestClose={onClose} onRequestSubmit={handleInvite}>
             <TextInput data-modal-primary-focus id="text-input-1" labelText="Email address (Google account of Microsoft account)" placeholder="user@example.com"
                        value={inviteEmail}
-                       onChange={(e) => setInviteEmail(e.target.value)}
+                       onChange={(e) => setInviteEmail(e.target.value.toLowerCase())}
                        style={{
                            marginBottom: '1rem'
                        }} />
