@@ -530,6 +530,13 @@ a {
   gap: 4px;
 }
 
+.twin-button-wrapper {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+
 /* START: bpmn-js overrides */
 
 .bjs-breadcrumbs {
@@ -611,6 +618,10 @@ a {
 
 .open-members-panel-button {
   margin-top: 2px;
+}
+
+.cds--btn:disabled {
+  cursor: auto !important;
 }
 
 /* END: Carbon Design System overrides */

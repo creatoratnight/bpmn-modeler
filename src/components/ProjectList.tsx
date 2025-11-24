@@ -22,7 +22,7 @@ import {
     TableToolbar,
     TableToolbarContent, Tile
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -596,7 +596,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                 <TableRow>
                                                     <TableCell colSpan={headers.length}>
                                                         <div style={{ textAlign: 'center', padding: '50px' }}>
-                                                            <Folder size={64} style={{ fill: '#8d8d8d' }} />
+                                                            <Folders size={64} style={{ fill: '#8d8d8d' }} />
                                                             <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>
                                                                 No projects yet. Click "Add Project" to get started.
                                                             </p>
@@ -650,7 +650,13 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                                     />
                                                                     {/* Add more actions here as <OverflowMenuItem> */}
                                                                 </OverflowMenu>
-                                                            ) : (
+                                                            ) : cell.info.header === 'name' ? (
+                                                                <div className="project-name-with-icon">
+                                                                    {<Folders
+                                                                            className="project-name-icon"/>} {cell.value}
+                                                                </div>
+                                                            ) :
+                                                            (
                                                                 cell.value
                                                             )}
                                                         </TableCell>
@@ -748,11 +754,18 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                                         No models in this project. Add or import a model to begin.
                                                                     </p>
                                                                     <br/><br/>
-                                                                    <Button onClick={() => {
-                                                                        setIsAddModelModalOpen(true);
-                                                                        setSelectedProjectId(currentProject.id);
-                                                                    }}><DecisionTree className="project-name-icon"/> Add BPMN
-                                                                    </Button>
+                                                                    <div className="twin-button-wrapper">
+                                                                        <Button onClick={() => {
+                                                                            setIsAddModelModalOpen(true);
+                                                                            setSelectedProjectId(currentProject.id);
+                                                                        }}><DecisionTree className="project-name-icon"/> Add BPMN
+                                                                        </Button>
+                                                                        <input style={{display: 'none'}} type="file" accept=".bpmn, .dmn"
+                                                                            ref={fileInputRef}
+                                                                            onChange={(event) => handleFileChange(event, currentProject.id)}/>
+                                                                        <Button onClick={handleUploadButtonClick}><Upload
+                                                                            className="project-name-icon"/> Import</Button>
+                                                                    </div>
                                                                 </div>
                                                             </TableCell>
                                                         </TableRow>
