@@ -4,13 +4,13 @@ import {auth} from './config/.firebase.js';
 import {saveBPMNModel, saveDMNodel} from './services/models.service.tsx'
 import {signInWithGoogle, signInWithMicrosoft, logout} from './services/user.service.tsx';
 import { onAuthStateChanged } from 'firebase/auth';
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import ProjectList from "./components/ProjectList.tsx";
 import SaveModal from "./components/SaveModal.tsx";
 import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
-import {Button, OverflowMenu, OverflowMenuItem, Tile} from '@carbon/react';
+import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile} from '@carbon/react';
 import {Save, Login, Download, Image as PNG} from '@carbon/react/icons';
 import { child, get, getDatabase, ref, set } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
@@ -21,6 +21,10 @@ import {downloadXmlAsBpmn} from './services/utils.service.tsx';
 function App() {
     const [user, setUser] = useState(null);
     const [model, setModel] = useState({});
+    const [autoSave, setAutoSave] = useState(() => {
+        const saved = localStorage.getItem('autoSave');
+        return saved ? JSON.parse(saved) : false;
+    });
     const [project, setProject] = useState({});
     const [folder, setfolder] = useState({});
     const [viewMode, setViewMode] = useState('ALL_PROJECTS');
@@ -30,6 +34,18 @@ function App() {
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [userAvatar, setUserAvatar] = useState('user.png');
     const bpmnModelerRef = useRef(null);
+
+    const autoSaveRef = useRef(autoSave);
+    const modelRef = useRef(model);
+
+    useEffect(() => {
+        autoSaveRef.current = autoSave;
+        localStorage.setItem('autoSave', JSON.stringify(autoSave));
+    }, [autoSave]);
+
+    useEffect(() => {
+        modelRef.current = model;
+    }, [model]);
 
     toastr.options = {
         closeButton: false,
@@ -63,7 +79,6 @@ function App() {
                 const snapshot = await get(child(userRef, '/'));
                 if (snapshot.exists()) {
                     const userData = snapshot.val();
-                    // console.log('User data fetched from the database.', userData);
                     setUserAvatar(userData.imageUrl || 'user.png');
                 }
             } else {
@@ -95,7 +110,6 @@ function App() {
     };
 
     const handleOpenModel = (project, model) => {
-        console.log(model, project)
         //TODO: remove if statement if DMN is supported
         if (model?.type === 'bpmn') {
             setProject(project);
@@ -108,18 +122,22 @@ function App() {
         }
 
         if (model?.type === 'folderUp') {
-            console.log('folderUp');
             setfolder({});
         }
     };
 
-    const handleModelChange = (newXml) => {
+    const handleModelChange = useCallback((newXml) => {
         setChanges(true);
-        setModel({
-            ...model,
+        const updatedModel = {
+            ...modelRef.current,
             xmlData: newXml
-        });
-    };
+        };
+        setModel(updatedModel);
+        if (autoSaveRef.current) {
+            saveBPMNModel(updatedModel);
+            setChanges(false);
+        }
+    }, []);
 
     const handleViewPositionChange = (viewbox) => {
         setViewPosition(viewbox);
@@ -147,6 +165,7 @@ function App() {
             setChanges(false);
         } else {
          setIsSaveModalOpen(true);
+         setfolder({});
         }
     }
 
@@ -314,36 +333,58 @@ function App() {
           </Tile>
           {viewMode === ('BPMN' || 'DMN') &&
           <div className="modeler-toolbar-background"></div>}
-          {viewMode === 'BPMN' && changes &&
-              <Button onClick={() => onSaveModelClick(model)} className="save-button">
-                  <Save className="project-name-icon"/> Save
-              </Button>}
-            {viewMode === 'BPMN' &&
-                <Button
-                    onClick={() => downloadXmlAsBpmn(model)}
-                    className="download-bpmn-button"
-                    hasIconOnly
-                    renderIcon={Download}
-                    iconDescription="Download BPMN"
-                    tooltipPosition="right"
-                />}
-            {viewMode === 'BPMN' &&
-                <Button
-                    onClick={onDownloadAsPng}
-                    className="download-png-button"
-                    hasIconOnly
-                    renderIcon={PNG}
-                    iconDescription="Download as image"
-                    tooltipPosition="right"
-                />}
-            {viewMode === 'BPMN' && !changes &&
-              <Button onClick={() => onSaveModelClick(model)} className="save-button" disabled>
-                  <Save className="project-name-icon"/> Save
-              </Button>}
-          {viewMode === 'DMN' &&
-              <Button onClick={() => onSaveDMNClick(model)} className="save-button">
-                  Save
-              </Button>}
+            <div className="modeler-toolbar">
+                <div className="modeler-toolbar-left">
+                    {viewMode === 'BPMN' &&
+                        <Button
+                            onClick={() => downloadXmlAsBpmn(model)}
+                            className="download-bpmn-button"
+                            hasIconOnly
+                            renderIcon={Download}
+                            iconDescription="Download BPMN"
+                            tooltipPosition="right"
+                        />}
+                    {viewMode === 'BPMN' &&
+                        <Button
+                            onClick={onDownloadAsPng}
+                            className="download-png-button"
+                            hasIconOnly
+                            renderIcon={PNG}
+                            iconDescription="Download as image"
+                            tooltipPosition="right"
+                        />}
+                </div>
+                <div className="modeler-toolbar-right">
+                    {viewMode === 'BPMN' &&
+                        <Toggle
+                            className="auto-save-toggle"
+                            id="auto-save"
+                            labelText="Auto save"
+                            hideLabel={true}
+                            size="sm"
+                            toggled={autoSave}
+                            onToggle={(checked) => {
+                                if (checked) {
+                                    saveBPMNModel(model);
+                                    setChanges(false);
+                                }
+                                setAutoSave(checked)
+                            }}
+                        />}
+                    {viewMode === 'BPMN' && changes &&
+                        <Button onClick={() => onSaveModelClick(model)}>
+                            <Save className="project-name-icon"/> Save
+                        </Button>}
+                    {viewMode === 'BPMN' && !changes &&
+                        <Button onClick={() => onSaveModelClick(model)} disabled>
+                            <Save className="project-name-icon"/> Save
+                        </Button>}
+                    {viewMode === 'DMN' &&
+                        <Button onClick={() => onSaveDMNClick(model)}>
+                            Save
+                        </Button>}
+                </div>
+            </div>
           {viewMode === 'BPMN' && user && <BPMNModelerComponent ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
           {viewMode === 'DMN' && user && <DMNModelerComponent xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
           {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}

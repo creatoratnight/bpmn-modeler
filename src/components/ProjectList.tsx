@@ -272,8 +272,6 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     const handleRenameFolder = (projectId, newFolderName) => {
         const db = getDatabase();
         const projectFoldersRef = ref(db, `/projects/${projectId}/folders/${selectedModel.id}`);
-        console.log('projectFoldersRef: ', projectFoldersRef);
-
 
         update(projectFoldersRef, {name: newFolderName})
             .then(() => {
@@ -431,10 +429,6 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             const userProjects = projectsSnapshots
                 .filter((snapshot) => snapshot.exists())
                 .map((snapshot) => {
-                    // const projectModelsIds = Object.keys(snapshot.val().models);
-                    // const projectModelsPromises = projectModelsIds.map((modelId) => get(ref(db, `bpmnModels/${modelId}`)));
-                    // const projectModelsSnapshots = await Promise.all(projectModelsPromises);
-                    // console.log('projectModelsSnapshots: ', projectModelsSnapshots);
                     const projectId = snapshot.key;
                     const projectData = snapshot.val();
                     const projectModels = Object.keys(bpmnModelsData)
@@ -883,7 +877,6 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         const model = [{'type': 'folderUp', 'id': 'folderUp', 'name': '..'}, ...currentProject.folders, ...currentProject.models].filter(
                                                             (model) => model.id === row.id
                                                         )[0];
-                                                        // console.log('model: ', model);
                                                         return (
                                                             <TableRow key={row.id}
                                                                       onClick={() => onOpenModel(currentProject, model)}
