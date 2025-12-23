@@ -6,6 +6,7 @@ export const saveBPMNModel = (model) => {
         name: model.name,
         type: 'bpmn',
         ownerId: model.ownerId,
+        folder: model.folder || null,
         projectId: model.projectId,
         xmlData: model.xmlData,
         updatedAt: new Date().toISOString()

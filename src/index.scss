@@ -609,11 +609,32 @@ a {
   height: 48px;
   width: 100%;
   background-color: #efefef;
-  // border-bottom: 1px solid #ddd;
   position: absolute;
   top: 64px;
   left: 0;
 ;
+}
+
+.modeler-toolbar {
+  z-index: 999;
+  height: 48px;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.modeler-toolbar-left {
+  width: fit-content;
+}
+
+.modeler-toolbar-right {
+  z-index: 9999;
+  width: fit-content;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
 }
 
 .open-members-panel-button {
@@ -622,6 +643,13 @@ a {
 
 .cds--btn:disabled {
   cursor: auto !important;
+}
+
+.auto-save-toggle .cds--toggle__switch--checked {
+    background-color: var(--cds-button-primary, #0f62fe) !important;
+}
+.auto-save-toggle .cds--toggle__switch--checked .cds--toggle__check {
+    fill: var(--cds-button-primary, #0f62fe) !important;
 }
 
 /* END: Carbon Design System overrides */
