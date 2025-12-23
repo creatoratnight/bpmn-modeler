@@ -35,6 +35,7 @@ import {
 import {deleteModelsAndInvites} from '../services/projects.service.tsx';
 import AddFolderModal from './AddFolderModal.tsx';
 import RenameFolderModal from './RenameFolderModal.tsx';
+import MoveModelModal from "./MoveModelModal.tsx";
 
 const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenModel, onNavigateHome, onOpenProject}) => {
     const [projects, setProjects] = useState([]);
@@ -47,6 +48,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     const [isRenameProjectModalOpen, setIsRenameProjectModalOpen] = useState(false);
     const [isRenameModelModalOpen, setIsRenameModelModalOpen] = useState(false);
     const [isRenameFolderModalOpen, setIsRenameFolderModalOpen] = useState(false);
+    const [isMoveModelModalOpen, setIsMoveModelModalOpen] = useState(false);
     const [selectedProjectId, setSelectedProjectId] = useState(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedModel, setSelectedModel] = useState({});
@@ -281,6 +283,18 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             .catch((error) => toastr.error("Error updating model name: ", error));
     }
 
+    const handleMoveModel = (newFolderId) => {
+        const db = getDatabase();
+        const modelRef = ref(db, `bpmnModels/${selectedModel.id}`);
+
+        update(modelRef, {folder: newFolderId || null})
+            .then(() => {
+                fetchUserProjects(user.uid);
+                toastr.success("Model moved successfully");
+            })
+            .catch((error) => toastr.error("Error moving model: ", error));
+    }
+
     const handleDuplicateModel = (model) => {
         if (model) {
             const db = getDatabase();
@@ -504,10 +518,10 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         setIsConfirmModalOpen(true);
     };
 
-    const onDeleteModel = (modelId, projectId) => {
+    const onDeleteModel = (modelId) => {
         const db = getDatabase();
         const modelRef = ref(db, `bpmnModels/${modelId}`);
-        const projectModelRef = ref(db, `projects/${projectId}/models/${modelId}`);
+        const projectModelRef = ref(db, `projects/${currentProject.id}/models/${modelId}`);
 
         remove(projectModelRef);
 
@@ -520,18 +534,31 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     }
 
-    const onDeleteProject = (projectId) => {
+    const onDeleteProject = () => {
         const db = getDatabase();
-        const modelRef = ref(db, `projects/${projectId}`);
+        const modelRef = ref(db, `projects/${currentProject.id}`);
 
         remove(modelRef).then(() => {
-            deleteModelsAndInvites(projectId);
+            deleteModelsAndInvites(currentProject.id);
             toastr.success('Project deleted successfully');
             fetchUserProjects(user.uid);
             setIsConfirmModalOpen(false);
             onNavigateHome();
         }).catch((error) => {
             toastr.error('Error deleting project: ', error);
+        });
+    }
+
+    const onDeleteFolder = (folderId) => {
+        const db = getDatabase();
+        const projectFolderRef = ref(db, `projects/${currentProject.id}/folders/${folderId}`);
+
+        remove(projectFolderRef).then(() => {
+            toastr.success('Folder deleted successfully');
+            fetchUserProjects(user.uid);
+            setIsConfirmModalOpen(false);
+        }).catch((error) => {
+            toastr.error('Error deleting folder: ', error);
         });
     }
 
@@ -766,6 +793,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                         id: model.id || '',
                                         name: model.name || '',
                                         type: model.type || '',
+                                        folder: model.folder || '',
                                         owner: currentProject.members.find(member => member.id === model.ownerId)?.displayName || '',
                                         date: model.updatedAt ? convertDateString(model.updatedAt) : '',
                                     }))}
@@ -860,8 +888,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                             <TableRow key={row.id}
                                                                       onClick={() => onOpenModel(currentProject, model)}
                                                                       style={model?.type === 'dmn' ? { cursor: 'not-allowed' } : { }}>
-                                                                {row.cells.map((cell) => (
-                                                                    <TableCell key={cell.id}>
+                                                                {row.cells.map((cell) => <TableCell key={cell.id}>
                                                                         {cell.info.header === 'actions' ? (
                                                                             <OverflowMenu flipped>
                                                                                 {(model?.type === 'bpmn' || model?.type === 'dmn') &&<OverflowMenuItem
@@ -896,7 +923,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                                     />}
                                                                                 {((model?.type === 'bpmn' || model?.type === 'dmn') && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) &&
                                                                                     <OverflowMenuItem
-                                                                                        itemText="Move to ..."
+                                                                                        itemText="Move to..."
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setSelectedModel(model);
+                                                                                            setIsMoveModelModalOpen(true);
+                                                                                        }}
                                                                                     />}
                                                                                 {((model?.type === 'bpmn' || model?.type === 'dmn') && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) &&
                                                                                     <OverflowMenuItem
@@ -906,9 +938,27 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                                             e.stopPropagation(); // Prevent triggering row onClick
                                                                                             openConfirmModal(
                                                                                                 `Are you sure you want to delete project '${row.cells[0].value}'?`,
-                                                                                                () => onDeleteModel(model.id, currentProject.uid)
+                                                                                                () => onDeleteModel(model.id)
                                                                                             );
                                                                                         }}
+                                                                                    />}
+                                                                                {(model?.type === 'folder' && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) && currentProject.models.filter(mod => mod.folder == model.id).length == 0 &&
+                                                                                    <OverflowMenuItem
+                                                                                        itemText="Delete Folder"
+                                                                                        isDelete
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation(); // Prevent triggering row onClick
+                                                                                            openConfirmModal(
+                                                                                                `Are you sure you want to delete folder '${row.cells[0].value}'?`,
+                                                                                                () => onDeleteFolder(model.id)
+                                                                                            );
+                                                                                        }}
+                                                                                    />}
+                                                                                {(model?.type === 'folder' && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) && currentProject.models.filter(mod => mod.folder == model.id).length > 0 &&
+                                                                                    <OverflowMenuItem
+                                                                                        itemText="Delete Folder"
+                                                                                        isDelete
+                                                                                        disabled
                                                                                     />}
                                                                             </OverflowMenu>
                                                                         ) : cell.info.header === 'name' ? (
@@ -925,7 +975,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                                 cell.value
                                                                         ) : (<></>)}
                                                                     </TableCell>
-                                                                ))}
+                                                                )}
                                                             </TableRow>
                                                         )
                                                     })}
@@ -1109,6 +1159,14 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 onRenameFolder={handleRenameFolder}
                 currentName={selectedModel.name}
                 projectId={currentProject.id}
+            />
+
+            <MoveModelModal
+                isOpen={isMoveModelModalOpen}
+                onClose={() => setIsMoveModelModalOpen(false)}
+                onMoveModel={handleMoveModel}
+                folders={currentProject?.folders || []}
+                currentFolderId={selectedModel?.folder}
             />
 
             <InviteModal
