@@ -12,7 +12,7 @@ import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Tile} from '@carbon/react';
 import {Save, Login, Download, Image as PNG} from '@carbon/react/icons';
-import { child, get, getDatabase, ref } from 'firebase/database';
+import { child, get, getDatabase, ref, set } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
 import {downloadXmlAsBpmn} from './services/utils.service.tsx';
@@ -22,6 +22,7 @@ function App() {
     const [user, setUser] = useState(null);
     const [model, setModel] = useState({});
     const [project, setProject] = useState({});
+    const [folder, setfolder] = useState({});
     const [viewMode, setViewMode] = useState('ALL_PROJECTS');
     const [changes, setChanges] = useState(false);
     const [viewPosition, setViewPosition] = useState(null);
@@ -62,7 +63,7 @@ function App() {
                 const snapshot = await get(child(userRef, '/'));
                 if (snapshot.exists()) {
                     const userData = snapshot.val();
-                    console.log('User data fetched from the database.', userData);
+                    // console.log('User data fetched from the database.', userData);
                     setUserAvatar(userData.imageUrl || 'user.png');
                 }
             } else {
@@ -88,16 +89,27 @@ function App() {
     const handleOpenProject = (project) => {
         if (project){
             setProject(project);
+            // setfolder({});
             setViewMode('PROJECT');
         }
     };
 
     const handleOpenModel = (project, model) => {
+        console.log(model, project)
         //TODO: remove if statement if DMN is supported
-        if (model.type === 'bpmn') {
+        if (model?.type === 'bpmn') {
             setProject(project);
             setModel(model);
             setViewMode(model.type === 'bpmn' ? 'BPMN' : 'DMN');
+        }
+
+        if (model?.type === 'folder') {
+            setfolder(model);
+        }
+
+        if (model?.type === 'folderUp') {
+            console.log('folderUp');
+            setfolder({});
         }
     };
 
@@ -116,6 +128,7 @@ function App() {
     const onMyProjectsNavClick = () => {
         if (!changes) {
             setProject({});
+            setfolder({});
             setModel({});
             setViewMode('ALL_PROJECTS');
             setViewPosition(null);
@@ -127,7 +140,18 @@ function App() {
 
     const onCurrentProjectNavClick = () => {
         if (!changes) {
-            // setProject({});
+            setModel({});
+            setfolder({});
+            setViewMode('PROJECT');
+            setViewPosition(null);
+            setChanges(false);
+        } else {
+         setIsSaveModalOpen(true);
+        }
+    }
+
+    const onCurrentFolderNavClick = () => {
+        if (!changes) {
             setModel({});
             setViewMode('PROJECT');
             setViewPosition(null);
@@ -242,6 +266,12 @@ function App() {
                   {project.name && <div className="nav-project" onClick={onCurrentProjectNavClick}>
                       {project.name}
                   </div>}
+                  {folder.name && <div>
+                      &#8594;
+                  </div>}
+                  {folder.name && <div className="nav-project" onClick={onCurrentFolderNavClick}>
+                      {folder.name}
+                  </div>}
                   {model.name && <div>
                       &#8594;
                   </div>}
@@ -316,7 +346,7 @@ function App() {
               </Button>}
           {viewMode === 'BPMN' && user && <BPMNModelerComponent ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
           {viewMode === 'DMN' && user && <DMNModelerComponent xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
-          {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
+          {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
           {!user && <div className="welcome-wrapper">
                 <img src="/bpmn_modeler_logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
               <div className="welcome-title">

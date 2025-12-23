@@ -22,7 +22,7 @@ import {
     TableToolbar,
     TableToolbarContent, Tile
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -33,16 +33,20 @@ import {
     sortRows
 } from '../services/utils.service.tsx';
 import {deleteModelsAndInvites} from '../services/projects.service.tsx';
+import AddFolderModal from './AddFolderModal.tsx';
+import RenameFolderModal from './RenameFolderModal.tsx';
 
-const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHome, onOpenProject}) => {
+const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenModel, onNavigateHome, onOpenProject}) => {
     const [projects, setProjects] = useState([]);
     const [invitations, setInvitations] = useState([]);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isAddModelModalOpen, setIsAddModelModalOpen] = useState(false);
     const [isAddDMNModalOpen, setIsAddDMNModalOpen] = useState(false);
+    const [isAddFolderModalOpen, setIsAddFolderModalOpen] = useState(false);
     const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
     const [isRenameProjectModalOpen, setIsRenameProjectModalOpen] = useState(false);
     const [isRenameModelModalOpen, setIsRenameModelModalOpen] = useState(false);
+    const [isRenameFolderModalOpen, setIsRenameFolderModalOpen] = useState(false);
     const [selectedProjectId, setSelectedProjectId] = useState(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedModel, setSelectedModel] = useState({});
@@ -138,6 +142,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                 projectId: projectId,
                 ownerId: user.uid,
                 name: newModelName,
+                folder: selectedFolder?.id || null,
                 type: 'bpmn',
                 xmlData: `<?xml version="1.0" encoding="UTF-8"?>
                             <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1y9ob7p" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.19.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.20.0">
@@ -183,6 +188,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                 ownerId: user.uid,
                 name: newModelName,
                 type: 'dmn',
+                folder: selectedFolder?.id || null,
                 xmlData: `<?xml version="1.0" encoding="UTF-8"?>
                             <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="${camelize(newModelName)}Drd" name="${newModelName} DRD" namespace="http://camunda.org/schema/1.0/dmn" exporter="Camunda Modeler" exporterVersion="5.19.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.20.0">
                               <decision id="${camelize(newModelName)}" name="${newModelName}">
@@ -219,9 +225,34 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
         }
     };
 
+    const handleAddfolder = (projectId, newFolderName) => {
+        if (newFolderName) {
+            const db = getDatabase();
+            const projectFoldersRef = ref(db, '/projects/' + projectId + '/folders/');
+
+            const newProjectFolderRef = push(projectFoldersRef);
+            const folderId = newProjectFolderRef.key;
+
+            set(newProjectFolderRef, {
+                projectId: projectId,
+                ownerId: user.uid,
+                name: newFolderName,
+                type: 'folder'
+            }).then(() => {
+                fetchUserProjects(user.uid);
+                toastr.success('New folder added successfully');
+            })
+        }
+    };
+
     const onRenameModel = (model) => {
         setSelectedModel(model);
         setIsRenameModelModalOpen(true);
+    }
+
+    const onRenameFolder = (model) => {
+        setSelectedModel(model);
+        setIsRenameFolderModalOpen(true);
     }
 
     const handleRenameModel = (newModelName) => {
@@ -232,6 +263,20 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
             .then(() => {
                 fetchUserProjects(user.uid);
                 toastr.success("Model name updated successfully");
+            })
+            .catch((error) => toastr.error("Error updating model name: ", error));
+    }
+
+    const handleRenameFolder = (projectId, newFolderName) => {
+        const db = getDatabase();
+        const projectFoldersRef = ref(db, `/projects/${projectId}/folders/${selectedModel.id}`);
+        console.log('projectFoldersRef: ', projectFoldersRef);
+
+
+        update(projectFoldersRef, {name: newFolderName})
+            .then(() => {
+                fetchUserProjects(user.uid);
+                toastr.success("Folder name updated successfully");
             })
             .catch((error) => toastr.error("Error updating model name: ", error));
     }
@@ -298,6 +343,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                 ownerId: user.uid,
                 name: extractBpmnProcessName(xml) || filename.replace('.bpmn',''),
                 type: 'bpmn',
+                folder: selectedFolder?.id || null,
                 xmlData: xml,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -375,7 +421,6 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                     // const projectModelsPromises = projectModelsIds.map((modelId) => get(ref(db, `bpmnModels/${modelId}`)));
                     // const projectModelsSnapshots = await Promise.all(projectModelsPromises);
                     // console.log('projectModelsSnapshots: ', projectModelsSnapshots);
-
                     const projectId = snapshot.key;
                     const projectData = snapshot.val();
                     const projectModels = Object.keys(bpmnModelsData)
@@ -385,11 +430,20 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                             ...bpmnModelsData[modelId]
                         }));
 
+                    const projectFolders = Object.keys(projectData?.folders ?? {}).map(folderId => ({
+                        id: folderId, 
+                        name: projectData.folders[folderId].name,
+                        type: 'folder',
+                        owner: '',
+                        date: undefined,
+                        actions: undefined
+                    }));
+
                     const projectMembers = Object.keys(projectData.members).map(memberId => ({
                         id: memberId,
                         role: projectData.members[memberId],
-                        displayName: usersData[memberId]?.displayName || 'Unknown',
-                        email: usersData[memberId]?.email || 'Unknown',
+                        displayName: usersData[memberId]?.displayName || '',
+                        email: usersData[memberId]?.email || '',
                         imageUrl: usersData[memberId]?.imageUrl || 'user.png'
                     }));
 
@@ -397,6 +451,7 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                         id: projectId,
                         ...projectData,
                         models: projectModels,
+                        folders: projectFolders,
                         members: projectMembers
                     };
                 });
@@ -705,15 +760,17 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                         <div className="project-wrapper">
                             <div className="project-models-wrapper">
                                 <DataTable
-                                    rows={sortRows([...currentProject.models], sortHeaderModels, sortDirectionModels).map(model => ({
-                                        id: model.id,
-                                        name: model.name,
-                                        type: model.type,
-                                        owner: currentProject.members.find(member => member.id === model.ownerId)?.displayName || 'Unknown',
-                                        date: convertDateString(model.updatedAt),
+                                    rows={sortRows([{'type': 'folderUp', 'id': 'folderUp', 'name': '..', 'folder': ''}, ...currentProject?.folders, ...currentProject.models], sortHeaderModels, sortDirectionModels)
+                                            .filter(model => model?.folder === selectedFolder?.id || (model?.type === 'folderUp' && selectedFolder?.id))
+                                            .map(model => ({
+                                        id: model.id || '',
+                                        name: model.name || '',
+                                        type: model.type || '',
+                                        owner: currentProject.members.find(member => member.id === model.ownerId)?.displayName || '',
+                                        date: model.updatedAt ? convertDateString(model.updatedAt) : '',
                                     }))}
                                     headers={[
-                                        {key: 'name', header: 'Model Name'},
+                                        {key: 'name', header: 'Name'},
                                         {key: 'type', header: 'Type'},
                                         {key: 'owner', header: 'Owner'},
                                         {key: 'date', header: 'Last Changed'},
@@ -741,6 +798,11 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                         setSelectedProjectId(currentProject.id);
                                                     }}><TableSplit className="project-name-icon"/> Add DMN
                                                     </Button>
+                                                    {!selectedFolder?.id && <Button onClick={() => {
+                                                        setIsAddFolderModalOpen(true);
+                                                        setSelectedProjectId(currentProject.id);
+                                                    }}><Folder className="project-name-icon"/> Add Folder
+                                                    </Button>}
                                                 </TableToolbarContent>
                                             </TableToolbar>
                                             <Table>
@@ -790,30 +852,33 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                 </TableHead>
                                                 <TableBody>
                                                     {rows.map(row => {
-                                                        const model = currentProject.models.filter((model) => model.id === row.id)[0];
+                                                        const model = [{'type': 'folderUp', 'id': 'folderUp', 'name': '..'}, ...currentProject.folders, ...currentProject.models].filter(
+                                                            (model) => model.id === row.id
+                                                        )[0];
+                                                        // console.log('model: ', model);
                                                         return (
                                                             <TableRow key={row.id}
                                                                       onClick={() => onOpenModel(currentProject, model)}
-                                                                      style={model.type === 'dmn' ? { cursor: 'not-allowed' } : { }}>
+                                                                      style={model?.type === 'dmn' ? { cursor: 'not-allowed' } : { }}>
                                                                 {row.cells.map((cell) => (
                                                                     <TableCell key={cell.id}>
                                                                         {cell.info.header === 'actions' ? (
                                                                             <OverflowMenu flipped>
-                                                                                <OverflowMenuItem
+                                                                                {(model?.type === 'bpmn' || model?.type === 'dmn') &&<OverflowMenuItem
                                                                                     itemText="Download"
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
                                                                                         downloadXmlAsBpmn(model);
                                                                                     }}
-                                                                                />
-                                                                                <OverflowMenuItem
+                                                                                />}
+                                                                                {(model?.type === 'bpmn' || model?.type === 'dmn') && <OverflowMenuItem
                                                                                     itemText="Duplicate"
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
                                                                                         handleDuplicateModel(model);
                                                                                     }}
-                                                                                />
-                                                                                {(model.ownerId === user.uid || currentProject.ownerId === user.uid) &&
+                                                                                />}
+                                                                                {((model?.type === 'bpmn' || model?.type === 'dmn') && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) &&
                                                                                     <OverflowMenuItem
                                                                                         itemText="Rename"
                                                                                         onClick={(e) => {
@@ -821,7 +886,19 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                                                             onRenameModel(model);
                                                                                         }}
                                                                                     />}
-                                                                                {(model.ownerId === user.uid || currentProject.ownerId === user.uid) &&
+                                                                                {(model?.type === 'folder' && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) &&
+                                                                                    <OverflowMenuItem
+                                                                                        itemText="Rename"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            onRenameFolder(model);
+                                                                                        }}
+                                                                                    />}
+                                                                                {((model?.type === 'bpmn' || model?.type === 'dmn') && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) &&
+                                                                                    <OverflowMenuItem
+                                                                                        itemText="Move to ..."
+                                                                                    />}
+                                                                                {((model?.type === 'bpmn' || model?.type === 'dmn') && (model?.ownerId === user.uid || currentProject.ownerId === user.uid)) &&
                                                                                     <OverflowMenuItem
                                                                                         itemText="Delete Model"
                                                                                         isDelete
@@ -836,15 +913,17 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                                                                             </OverflowMenu>
                                                                         ) : cell.info.header === 'name' ? (
                                                                             <div className="project-name-with-icon">
-                                                                                {model.type === 'bpmn' ? <DecisionTree
+                                                                                {model?.type === 'bpmn' ? <DecisionTree
                                                                                         className="project-name-icon"/> :
-                                                                                    <TableSplit
-                                                                                        className="project-name-icon"/>} {cell.value}
+                                                                                    model?.type === 'dmn' ? <TableSplit
+                                                                                        className="project-name-icon"/> : 
+                                                                                        model?.type === 'folder' ? <Folder className="project-name-icon"/> :
+                                                                                            <FolderParent className="project-name-icon"/>} {cell.value}
                                                                             </div>
 
-                                                                        ) : (
-                                                                            cell.value
-                                                                        )}
+                                                                        ) : model?.type != 'folderUp' ? (
+                                                                                cell.value
+                                                                        ) : (<></>)}
                                                                     </TableCell>
                                                                 ))}
                                                             </TableRow>
@@ -1010,11 +1089,26 @@ const ProjectList = ({user, viewMode, currentProject, onOpenModel, onNavigateHom
                 projectId={selectedProjectId}
             />
 
+            <AddFolderModal
+                isOpen={isAddFolderModalOpen}
+                onClose={() => setIsAddFolderModalOpen(false)}
+                onAddFolder={handleAddfolder}
+                projectId={selectedProjectId}
+            />
+
             <RenameModelModal
                 isOpen={isRenameModelModalOpen}
                 onClose={() => setIsRenameModelModalOpen(false)}
                 onRenameModel={handleRenameModel}
                 currentName={selectedModel.name}
+            />
+
+            <RenameFolderModal
+                isOpen={isRenameFolderModalOpen}
+                onClose={() => setIsRenameFolderModalOpen(false)}
+                onRenameFolder={handleRenameFolder}
+                currentName={selectedModel.name}
+                projectId={currentProject.id}
             />
 
             <InviteModal
