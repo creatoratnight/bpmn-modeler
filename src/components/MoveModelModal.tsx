@@ -30,7 +30,7 @@ const MoveModelModal = ({ isOpen, onClose, onMoveModel, folders, currentFolderId
                 value={selectedFolder}
                 onChange={(e) => setSelectedFolder(e.target.value)}
             >
-                <SelectItem value="" text="Project (No Folder)" />
+                <SelectItem value="" text="Project root (No Folder)" />
                 {folders.map((folder) => (
                     <SelectItem key={folder.id} value={folder.id} text={folder.name} />
                 ))}
