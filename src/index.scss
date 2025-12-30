@@ -661,6 +661,14 @@ a {
   color: black;
 }
 
+.cds--btn--primary:active {
+  background-color: #2b79bd;
+}
+
+.cds--batch-actions--active {
+    transform: translateX(0px);
+}
+
 /* END: Carbon Design System overrides */
 
 /* START: Minimap overrides */

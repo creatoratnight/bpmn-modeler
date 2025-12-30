@@ -27,7 +27,7 @@ import {
     TableSelectRow,
     Checkbox
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent, TrashCan, Move} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent, TrashCan, Move, Copy, Download} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -634,6 +634,44 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     }
 
+    const onBulkDuplicateModels = (models) => {
+        const db = getDatabase();
+        const promises = models.map(model => {
+            const bpmnModelsRef = ref(db, 'bpmnModels');
+            const newModelRef = push(bpmnModelsRef);
+            const modelId = newModelRef.key;
+
+            return set(newModelRef, {
+                projectId: model.projectId,
+                ownerId: user.uid,
+                name: `${model.name} Copy`,
+                type: model.type,
+                folder: model.folder || null,
+                xmlData: model.xmlData,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            }).then(() => {
+                const updates = {};
+                updates['/projects/' + model.projectId + '/models/' + modelId] = true;
+                updates['/projects/' + model.projectId + '/updatedAt'] = new Date().toISOString();
+                return update(ref(db), updates);
+            });
+        });
+
+        Promise.all(promises).then(() => {
+            toastr.success(`${models.length} models duplicated successfully`);
+            fetchUserProjects(user.uid);
+        }).catch((error) => {
+            toastr.error('Error duplicating models: ', error);
+        });
+    }
+
+    const onBulkDownloadModels = (models) => {
+        models.forEach(model => {
+            downloadXmlAsBpmn(model);
+        });
+    }
+
     const onDeleteProject = () => {
         const db = getDatabase();
         const modelRef = ref(db, `projects/${currentProject.id}`);
@@ -909,6 +947,38 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                             <TableContainer title="Models">
                                             <TableToolbar>
                                                 <TableBatchActions {...getBatchActionProps()}>
+                                                    <TableBatchAction
+                                                        tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
+                                                        renderIcon={Download}
+                                                        onClick={() => {
+                                                            const validRows = selectedRows.filter(r => {
+                                                                const item = [...currentProject.folders, ...currentProject.models].find(m => m.id === r.id);
+                                                                return item && item.type !== 'folder' && item.type !== 'folderUp';
+                                                            });
+                                                            if(validRows.length > 0) {
+                                                                const models = validRows.map(r => currentProject.models.find(m => m.id === r.id));
+                                                                onBulkDownloadModels(models);
+                                                            }
+                                                        }}
+                                                    >
+                                                        Download
+                                                    </TableBatchAction>
+                                                    <TableBatchAction
+                                                        tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
+                                                        renderIcon={Copy}
+                                                        onClick={() => {
+                                                            const validRows = selectedRows.filter(r => {
+                                                                const item = [...currentProject.folders, ...currentProject.models].find(m => m.id === r.id);
+                                                                return item && item.type !== 'folder' && item.type !== 'folderUp';
+                                                            });
+                                                            if(validRows.length > 0) {
+                                                                const models = validRows.map(r => currentProject.models.find(m => m.id === r.id));
+                                                                onBulkDuplicateModels(models);
+                                                            }
+                                                        }}
+                                                    >
+                                                        Duplicate
+                                                    </TableBatchAction>
                                                     <TableBatchAction
                                                         tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
                                                         renderIcon={TrashCan}
