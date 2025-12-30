@@ -30,7 +30,10 @@ function App() {
     const [viewMode, setViewMode] = useState('ALL_PROJECTS');
     const [changes, setChanges] = useState(false);
     const [viewPosition, setViewPosition] = useState(null);
-    const [isProjectViewerOpen, setIsProjectViewerOpen] = useState(false);
+    const [isProjectViewerOpen, setIsProjectViewerOpen] = useState(() => {
+        const saved = localStorage.getItem('isProjectViewerOpen');
+        return saved ? JSON.parse(saved) : false;
+    });
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [userAvatar, setUserAvatar] = useState('user.png');
@@ -53,6 +56,10 @@ function App() {
     useEffect(() => {
         projectRef.current = project;
     }, [project]);
+
+    useEffect(() => {
+        localStorage.setItem('isProjectViewerOpen', JSON.stringify(isProjectViewerOpen));
+    }, [isProjectViewerOpen]);
 
     useEffect(() => {
         setTimeout(() => {
@@ -444,8 +451,8 @@ function App() {
           {(viewMode === 'BPMN' || viewMode === 'DMN') && user ? (
               <div style={{ display: 'flex', width: '100%', overflow: 'hidden' }}>
                   {isProjectViewerOpen && (
-                      <div style={{ width: '250px', minWidth: '250px', borderRight: '2px solid #e0e0e0', backgroundColor: '#efefef', overflowY: 'auto', zIndex: 900 }}>
-                        <div style={{ height: '2px', width: '100%', backgroundColor: '#e0e0e0'}}></div>
+                      <div style={{ width: '250px', minWidth: '250px', maxHeight: 'calc(100vh - 64px)', borderRight: '2px solid #e0e0e0', backgroundColor: '#efefef', overflowY: 'auto', zIndex: 900 }}>
+                        <div style={{ height: '2px', width: '250px', backgroundColor: '#e0e0e0', position: 'absolute'}}></div>
                           {getSidePanelItems().map(item => (
                               <div
                                   key={item.id}
