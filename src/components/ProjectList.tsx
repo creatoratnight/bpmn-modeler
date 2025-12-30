@@ -70,6 +70,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
     const fileInputRef = useRef(null);
 
+    const updateLastChangedDate = (projectId) => {
+        const db = getDatabase();
+        const projectRef = ref(db, `projects/${projectId}`);
+        update(projectRef, { updatedAt: new Date().toISOString() });
+    };
+
     // Fetch projects when component mounts or userId changes
     useEffect(() => {
         fetchUserProjects(user.uid);
@@ -122,7 +128,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const db = getDatabase();
         const projectRef = ref(db, `projects/${currentProject.id}`);
 
-        update(projectRef, {name: newProjectName})
+        update(projectRef, {name: newProjectName, updatedAt: new Date().toISOString()})
             .then(() => {
                 fetchUserProjects(user.uid);
                 toastr.success("Project name updated successfully");
@@ -164,6 +170,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             }).then(() => {
                 const updates = {};
                 updates['/projects/' + projectId + '/models/' + modelId] = true;
+                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
 
                 update(ref(db), updates).then(() => {
                     toastr.success('New BPMN model added successfully');
@@ -216,6 +223,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             }).then(() => {
                 const updates = {};
                 updates['/projects/' + projectId + '/models/' + modelId] = true;
+                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
 
                 update(ref(db), updates).then(() => {
                     toastr.success('New DMN model added successfully');
@@ -241,6 +249,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 name: newFolderName,
                 type: 'folder'
             }).then(() => {
+                updateLastChangedDate(projectId);
                 fetchUserProjects(user.uid);
                 toastr.success('New folder added successfully');
             })
@@ -261,7 +270,10 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const db = getDatabase();
         const modelRef = ref(db, `bpmnModels/${selectedModel.id}`);
 
-        const updates = { name: newModelName };
+        const updates = {
+            name: newModelName,
+            updatedAt: new Date().toISOString()
+        };
 
         if (selectedModel.xmlData && (selectedModel.type === 'bpmn' || selectedModel.type === 'dmn')) {
             const isBpmn = selectedModel.type === 'bpmn';
@@ -296,6 +308,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
         update(modelRef, updates)
             .then(() => {
+                updateLastChangedDate(currentProject.id);
                 fetchUserProjects(user.uid);
                 toastr.success("Model name updated successfully");
             })
@@ -308,6 +321,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
         update(projectFoldersRef, {name: newFolderName})
             .then(() => {
+                updateLastChangedDate(projectId);
                 fetchUserProjects(user.uid);
                 toastr.success("Folder name updated successfully");
             })
@@ -318,8 +332,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const db = getDatabase();
         const modelRef = ref(db, `bpmnModels/${selectedModel.id}`);
 
-        update(modelRef, {folder: newFolderId || null})
+        update(modelRef, {
+            folder: newFolderId || null,
+            updatedAt: new Date().toISOString()
+        })
             .then(() => {
+                updateLastChangedDate(currentProject.id);
                 fetchUserProjects(user.uid);
                 toastr.success("Model moved successfully");
             })
@@ -347,6 +365,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             }).then(() => {
                 const updates = {};
                 updates['/projects/' + model.projectId + '/models/' + modelId] = true;
+                updates['/projects/' + model.projectId + '/updatedAt'] = new Date().toISOString();
 
                 update(ref(db), updates).then(() => {
                     toastr.success('Model duplicated successfully');
@@ -395,6 +414,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             }).then(() => {
                 const updates = {};
                 updates['/projects/' + projectId + '/models/' + modelId] = true;
+                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
 
                 update(ref(db), updates).then(() => {
                     toastr.success('New BPMN model added successfully');
@@ -428,6 +448,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             }).then(() => {
                 const updates = {};
                 updates['/projects/' + projectId + '/models/' + modelId] = true;
+                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
 
                 update(ref(db), updates).then(() => {
                     toastr.success('New DMN model added successfully');
@@ -572,6 +593,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         remove(projectModelRef);
 
         remove(modelRef).then(() => {
+            updateLastChangedDate(currentProject.id);
             toastr.success('Model deleted successfully');
             fetchUserProjects(user.uid);
             setIsConfirmModalOpen(false);
@@ -600,6 +622,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const projectFolderRef = ref(db, `projects/${currentProject.id}/folders/${folderId}`);
 
         remove(projectFolderRef).then(() => {
+            updateLastChangedDate(currentProject.id);
             toastr.success('Folder deleted successfully');
             fetchUserProjects(user.uid);
             setIsConfirmModalOpen(false);
@@ -618,6 +641,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         updates['/invitations/' + invitationId + '/status'] = 'Accepted';
         updates['/projects/' + projectId + '/members/' + userId] = 'editor';
         updates['/users/' + userId + '/projects/' + projectId] = true;
+        updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
 
         update(ref(db), updates).then(() => {
             toastr.success('Invitation accepted and user added to project');
@@ -654,6 +678,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
         remove(userProjectRef);
         remove(memberRef).then(() => {
+            updateLastChangedDate(projectId);
             fetchUserProjects(user.uid);
             setIsConfirmModalOpen(false);
             toastr.success(`Member removed from project successfully`);
@@ -762,21 +787,6 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         <TableCell key={cell.id}>
                                                             {cell.info.header === 'members' ? (
                                                                 renderMembersCell(cell.value) // Use the rendering function for the members cell
-                                                            ) : cell.info.header === 'actions' && cell.value ? (
-                                                                <OverflowMenu flipped>
-                                                                    <OverflowMenuItem
-                                                                        itemText="Delete Project"
-                                                                        isDelete
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation(); // Prevent triggering row onClick
-                                                                            openConfirmModal(
-                                                                                `Are you sure you want to delete project '${row.cells[0].value}'?`,
-                                                                                () => onDeleteProject(cell.value)
-                                                                            );
-                                                                        }}
-                                                                    />
-                                                                    {/* Add more actions here as <OverflowMenuItem> */}
-                                                                </OverflowMenu>
                                                             ) : cell.info.header === 'name' ? (
                                                                 <div className="project-name-with-icon">
                                                                     {<Folders
