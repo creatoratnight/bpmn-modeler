@@ -708,7 +708,6 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                 {key: 'diagrams', header: 'Models'},
                                 {key: 'date', header: 'Last Changed'},
                                 {key: 'members', header: 'Members'},
-                                {key: 'actions', header: 'Options'},
                             ]}
                             render={({rows, headers, getHeaderProps, getRowProps}) => (
                                 <TableContainer title="">
@@ -1036,7 +1035,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                     onClick={() => setIsMembersPanelOpen(true)}
                                     hasIconOnly
                                     renderIcon={Group}
-                                    iconDescription="Open members panel"
+                                    iconDescription="Open"
+                                    tooltipPosition='top'
                                     size="lg"
                                 />
                             )}
@@ -1069,7 +1069,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                             setSelectedProjectId(currentProject.id);
                                                         }}><UserFollow className="project-name-icon"/> Invite
                                                         </Button>
-                                                        <Button hasIconOnly kind="ghost" renderIcon={Close} iconDescription="Close members panel" tooltipPosition="top" onClick={() => setIsMembersPanelOpen(false)} />
+                                                        <Button hasIconOnly kind="ghost" renderIcon={Close} iconDescription="Close" tooltipPosition="top" onClick={() => setIsMembersPanelOpen(false)} />
                                                     </TableToolbarContent>
                                                 </TableToolbar>
                                                 <Table>
@@ -1145,7 +1145,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                         )}
                                     />
                                 </div>
-                            };
+                            }
                         </div>
                     </>}
             </div>
@@ -1221,8 +1221,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 userId={user.uid}
             />
         </div>
-    )
-        ;
+    );
 };
 
 export default ProjectList;
