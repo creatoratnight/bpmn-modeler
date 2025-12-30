@@ -261,7 +261,40 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const db = getDatabase();
         const modelRef = ref(db, `bpmnModels/${selectedModel.id}`);
 
-        update(modelRef, {name: newModelName})
+        const updates = { name: newModelName };
+
+        if (selectedModel.xmlData && (selectedModel.type === 'bpmn' || selectedModel.type === 'dmn')) {
+            const isBpmn = selectedModel.type === 'bpmn';
+            const tagName = isBpmn ? 'bpmn:process' : 'decision';
+            const refAttr = isBpmn ? 'bpmnElement' : 'dmnElementRef';
+
+            let newXmlData = selectedModel.xmlData;
+            console.log(newXmlData);
+            const newId = camelize(newModelName);
+
+            const idMatch = newXmlData.match(new RegExp(`<${tagName}[^>]+id="([^"]+)"`));
+            if (idMatch) {
+                const oldId = idMatch[1];
+
+                newXmlData = newXmlData.replace(
+                    new RegExp(`(<${tagName}[^>]+id=")([^"]+)(")`),
+                    `$1${newId}$3`
+                );
+
+                newXmlData = newXmlData.replace(
+                    new RegExp(`(<${tagName}[^>]+name=")([^"]+)(")`),
+                    `$1${newModelName}$3`
+                );
+
+                const escapedOldId = oldId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const refRegex = new RegExp(`(${refAttr}=")(${escapedOldId})(")`);
+                newXmlData = newXmlData.replace(refRegex, `$1${newId}$3`);
+
+                updates['xmlData'] = newXmlData;
+            }
+        }
+
+        update(modelRef, updates)
             .then(() => {
                 fetchUserProjects(user.uid);
                 toastr.success("Model name updated successfully");

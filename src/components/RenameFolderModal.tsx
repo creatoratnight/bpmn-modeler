@@ -5,8 +5,10 @@ const RenameFolderModal = ({ isOpen, onClose, onRenameFolder, currentName, proje
     const [newFolderName, setNewFolderName] = useState('');
 
     useEffect(() => {
-        setNewFolderName(currentName);
-    }, [currentName]);
+        if (isOpen) {
+            setNewFolderName(currentName || '');
+        }
+    }, [isOpen, currentName]);
 
 
     const handleRenameFolder = () => {

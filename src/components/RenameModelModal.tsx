@@ -5,8 +5,10 @@ const RenameModelModal = ({ isOpen, onClose, onRenameModel, currentName }) => {
     const [newModelName, setNewModelName] = useState('');
 
     useEffect(() => {
-            setNewModelName(currentName);
-        }, [currentName]);
+        if (isOpen) {
+            setNewModelName(currentName || '');
+        }
+    }, [isOpen, currentName]);
 
     const handleRenameModel = () => {
         onRenameModel(newModelName);
