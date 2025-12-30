@@ -473,34 +473,53 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     const fetchInvites = async () => {
         const db = getDatabase();
         const invitationsRef = ref(db, 'invitations');
-        const usersRef = ref(db, 'users');
-        const projectsRef = ref(db, 'projects');
         const invitationsQuery = query(invitationsRef, orderByChild('invitedEmail'), equalTo(user.email));
 
         try {
-            const [invitationsSnapshot, usersSnapshot, projectsSnapshot] = await Promise.all([
-                get(invitationsQuery),
-                get(usersRef),
-                get(projectsRef)
-            ]);
+            const invitationsSnapshot = await get(invitationsQuery);
 
             if (invitationsSnapshot.exists()) {
                 const invitationsData = invitationsSnapshot.val();
-                const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
-                const projectsData = projectsSnapshot.exists() ? projectsSnapshot.val() : {};
 
-                const invitationsList = Object.keys(invitationsData).map((key) => {
+                const invitationsList = await Promise.all(Object.keys(invitationsData).map(async (key) => {
                     const invitation = invitationsData[key];
+                    let senderName = 'Unknown';
+                    let senderEmail = 'Unknown';
+                    let projectName = 'Unknown';
+
+                    try {
+                        const senderSnapshot = await get(ref(db, `users/${invitation.senderId}`));
+                        if (senderSnapshot.exists()) {
+                            const senderData = senderSnapshot.val();
+                            senderName = senderData.displayName || 'Unknown';
+                            senderEmail = senderData.email || 'Unknown';
+                        }
+                    } catch (error) {
+                        console.error('Error fetching sender details:', error);
+                    }
+
+                    try {
+                        const projectSnapshot = await get(ref(db, `projects/${invitation.projectId}`));
+                        if (projectSnapshot.exists()) {
+                            const projectData = projectSnapshot.val();
+                            projectName = projectData.name || 'Unknown';
+                        }
+                    } catch (error) {
+                        console.error('Error fetching project details:', error);
+                    }
+
                     return {
                         id: key,
                         ...invitation,
-                        senderName: usersData[invitation.senderId]?.displayName || 'Unknown',
-                        senderEmail: usersData[invitation.senderId]?.email || 'Unknown',
-                        projectName: projectsData[invitation.projectId]?.name || 'Unknown'
+                        senderName,
+                        senderEmail,
+                        projectName
                     };
-                });
+                }));
 
                 setInvitations(invitationsList);
+            } else {
+                setInvitations([]);
             }
         } catch (error) {
             toastr.error('Error fetching invitations:', error);
@@ -690,7 +709,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                     <TableHeader
                                                         {...getHeaderProps({
                                                             header,
-                                                            isSortable: true,
+                                                            isSortable: header.key !== 'actions',
                                                             onClick: () => {
                                                                 const newDirection = sortDirection === 'ASC' ? 'DESC' : 'ASC';
                                                                 setSortHeader(header.key);
@@ -860,7 +879,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         {headers.map(header => (
                                                             <TableHeader key={header.key} {...getHeaderProps({
                                                                 header,
-                                                                isSortable: true,
+                                                                isSortable: header.key !== 'actions',
                                                                 onClick: () => {
                                                                     const newDirection = sortDirection === 'ASC' ? 'DESC' : 'ASC';
                                                                     setSortHeaderModels(header.key);

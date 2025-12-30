@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {getDatabase, push, ref, set} from "firebase/database";
+import {getDatabase, push, ref, set, get, query, orderByChild, equalTo, limitToFirst} from "firebase/database";
 import toastr from 'toastr';
 import {Modal, TextInput} from "@carbon/react";
 
@@ -10,8 +10,48 @@ const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     };
 
-    const handleInvite = () => {
+    const handleInvite = async () => {
         const db = getDatabase();
+
+        const invitationsRef = ref(db, 'invitations');
+        const duplicateQuery = query(invitationsRef, orderByChild('projectId'), equalTo(projectId));
+
+        try {
+            const snapshot = await get(duplicateQuery);
+            if (snapshot.exists()) {
+                const invites = snapshot.val();
+                const isDuplicate = Object.values(invites).some((invite: any) => invite.invitedEmail === inviteEmail && invite.status === 'Pending');
+                if (isDuplicate) {
+                    toastr.warning('An invitation is already pending for this email address.');
+                    return;
+                }
+            }
+        } catch (error) {
+            toastr.error('Error checking for duplicates:', error);
+            return;
+        }
+
+        const usersRef = ref(db, 'users');
+        const userQuery = query(usersRef, orderByChild('email'), equalTo(inviteEmail), limitToFirst(1));
+
+        try {
+            const userSnapshot = await get(userQuery);
+            if (userSnapshot.exists()) {
+                const users = userSnapshot.val();
+                const existingUserId = Object.keys(users)[0];
+                const memberRef = ref(db, `projects/${projectId}/members/${existingUserId}`);
+                const memberSnapshot = await get(memberRef);
+
+                if (memberSnapshot.exists()) {
+                    toastr.warning('This user is already a member of the project.');
+                    return;
+                }
+            }
+        } catch (error) {
+            toastr.error('Error checking project members:', error);
+            return;
+        }
+
         const newInvitationRef = push(ref(db, 'invitations'));
 
         set(newInvitationRef, {
