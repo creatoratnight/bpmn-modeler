@@ -2,7 +2,7 @@ import {getDatabase, ref, set} from "firebase/database";
 
 export const saveBPMNModel = (model) => {
     const db = getDatabase();
-    set(ref(db, `bpmnModels/${model.id}`), {
+    return set(ref(db, `bpmnModels/${model.id}`), {
         name: model.name,
         type: 'bpmn',
         ownerId: model.ownerId,
@@ -19,7 +19,7 @@ export const saveBPMNModel = (model) => {
 
 export const saveDMNodel = (model) => {
     const db = getDatabase();
-    set(ref(db, `bpmnModels/${model.id}`), {
+    return set(ref(db, `bpmnModels/${model.id}`), {
         name: model.name,
         type: 'dmn',
         ownerId: model.ownerId,

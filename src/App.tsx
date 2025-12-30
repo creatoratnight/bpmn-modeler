@@ -11,8 +11,8 @@ import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile} from '@carbon/react';
-import {Save, Login, Download, Image as PNG} from '@carbon/react/icons';
-import { child, get, getDatabase, ref, set } from 'firebase/database';
+import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose} from '@carbon/react/icons';
+import { child, get, getDatabase, ref, set, query, orderByChild, equalTo } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
 import {downloadXmlAsBpmn} from './services/utils.service.tsx';
@@ -30,13 +30,16 @@ function App() {
     const [viewMode, setViewMode] = useState('ALL_PROJECTS');
     const [changes, setChanges] = useState(false);
     const [viewPosition, setViewPosition] = useState(null);
+    const [isProjectViewerOpen, setIsProjectViewerOpen] = useState(false);
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [userAvatar, setUserAvatar] = useState('user.png');
     const bpmnModelerRef = useRef(null);
+    const dmnModelerRef = useRef(null);
 
     const autoSaveRef = useRef(autoSave);
     const modelRef = useRef(model);
+    const projectRef = useRef(project);
 
     useEffect(() => {
         autoSaveRef.current = autoSave;
@@ -46,6 +49,21 @@ function App() {
     useEffect(() => {
         modelRef.current = model;
     }, [model]);
+
+    useEffect(() => {
+        projectRef.current = project;
+    }, [project]);
+
+    useEffect(() => {
+        setTimeout(() => {
+            if (viewMode === 'BPMN' && bpmnModelerRef.current) {
+                bpmnModelerRef.current.handleResize();
+            }
+            if (viewMode === 'DMN' && dmnModelerRef.current) {
+                dmnModelerRef.current.handleResize();
+            }
+        }, 100);
+    }, [isProjectViewerOpen, viewMode]);
 
     toastr.options = {
         closeButton: false,
@@ -91,13 +109,58 @@ function App() {
         return () => unsubscribe();
     }, []);
 
+    const fetchProjectData = useCallback(async (projectId) => {
+        if (!projectId) return;
+        const db = getDatabase();
+
+        try {
+            const projectRef = ref(db, `projects/${projectId}`);
+            const projectSnapshot = await get(projectRef);
+
+            if (projectSnapshot.exists()) {
+                const projectData = projectSnapshot.val();
+
+                const modelsRef = ref(db, 'bpmnModels');
+                const modelsQuery = query(modelsRef, orderByChild('projectId'), equalTo(projectId));
+                const modelsSnapshot = await get(modelsQuery);
+
+                const models = [];
+                if (modelsSnapshot.exists()) {
+                    modelsSnapshot.forEach((childSnapshot) => {
+                        models.push({
+                            id: childSnapshot.key,
+                            ...childSnapshot.val()
+                        });
+                    });
+                }
+
+                const folders = Object.keys(projectData.folders || {}).map(key => ({
+                    id: key,
+                    ...projectData.folders[key],
+                    type: 'folder'
+                }));
+
+                const { members, ...restProjectData } = projectData;
+
+                setProject(prev => ({
+                    ...prev,
+                    ...restProjectData,
+                    models: models,
+                    folders: folders
+                }));
+            }
+        } catch (error) {
+            console.error("Error refreshing project data:", error);
+        }
+    }, []);
+
     const onSaveModelClick = (model) => {
-        saveBPMNModel(model);
+        saveBPMNModel(model).then(() => fetchProjectData(project.id));
         setChanges(false);
     };
 
     const onSaveDMNClick = (model) => {
-        saveDMNodel(model);
+        saveDMNodel(model).then(() => fetchProjectData(project.id));
         setChanges(false);
     };
 
@@ -134,10 +197,14 @@ function App() {
         };
         setModel(updatedModel);
         if (autoSaveRef.current) {
-            saveBPMNModel(updatedModel);
+            saveBPMNModel(updatedModel).then(() => {
+                if (projectRef.current?.id) {
+                    fetchProjectData(projectRef.current.id);
+                }
+            });
             setChanges(false);
         }
-    }, []);
+    }, [fetchProjectData]);
 
     const handleViewPositionChange = (viewbox) => {
         setViewPosition(viewbox);
@@ -257,6 +324,49 @@ function App() {
         }
     };
 
+    const getSidePanelItems = () => {
+        if (!project || !project.models) return [];
+
+        const currentFolderId = folder.id || null;
+        let items = [];
+
+        if (currentFolderId) {
+            items.push({ type: 'folderUp', name: '..', id: 'up' });
+        } else {
+            const folders = (project.folders || []).map(f => ({ ...f, type: 'folder' }));
+            items = [...items, ...folders];
+        }
+
+        const models = (project.models || [])
+            .filter(m => m.folder === currentFolderId || (!m.folder && !currentFolderId));
+
+        items = [...items, ...models];
+
+        return items.sort((a, b) => {
+            if (a.type === 'folderUp') return -1;
+            if (b.type === 'folderUp') return 1;
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+    };
+
+    const handleSidePanelItemClick = (item) => {
+        if (item.id === model.id) return;
+
+        if (changes) {
+            toastr.warning("You have unsaved changes. Please save them before switching models.");
+            return;
+        }
+
+        if (item.type === 'folder' || item.type === 'folderUp') {
+            setfolder(item.type === 'folderUp' ? {} : item);
+        } else {
+            setModel(item);
+            setViewMode(item.type === 'bpmn' ? 'BPMN' : 'DMN');
+        }
+    };
+
     return (
       <div className="App">
           {model && <SaveModal
@@ -331,72 +441,117 @@ function App() {
                   }
               </div>
           </Tile>
-          {viewMode === ('BPMN' || 'DMN') &&
-          <div className="modeler-toolbar-background"></div>}
-            <div className="modeler-toolbar">
-                <div className="modeler-toolbar-left">
-                    {viewMode === 'BPMN' &&
-                        <Button
-                            onClick={() => downloadXmlAsBpmn(model)}
-                            className="download-bpmn-button"
-                            hasIconOnly
-                            renderIcon={Download}
-                            iconDescription="Download BPMN"
-                            tooltipPosition="right"
-                        />}
-                    {viewMode === 'BPMN' &&
-                        <Button
-                            onClick={onDownloadAsPng}
-                            className="download-png-button"
-                            hasIconOnly
-                            renderIcon={PNG}
-                            iconDescription="Download as image"
-                            tooltipPosition="right"
-                        />}
-                </div>
-                <div className="modeler-toolbar-right">
-                    {viewMode === 'BPMN' &&
-                        <Toggle
-                            className="auto-save-toggle"
-                            id="auto-save"
-                            labelText="Auto save"
-                            hideLabel={true}
-                            size="sm"
-                            toggled={autoSave}
-                            onToggle={(checked) => {
-                                if (checked) {
-                                    saveBPMNModel(model);
-                                    setChanges(false);
-                                }
-                                setAutoSave(checked)
-                            }}
-                        />}
-                    {viewMode === 'BPMN' && changes &&
-                        <Button onClick={() => onSaveModelClick(model)}>
-                            <Save className="project-name-icon"/> Save
-                        </Button>}
-                    {viewMode === 'BPMN' && !changes &&
-                        <Button onClick={() => onSaveModelClick(model)} disabled>
-                            <Save className="project-name-icon"/> Save
-                        </Button>}
-                    {viewMode === 'DMN' &&
-                        <Button onClick={() => onSaveDMNClick(model)}>
-                            Save
-                        </Button>}
-                </div>
-            </div>
-          {viewMode === 'BPMN' && user && <BPMNModelerComponent ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
-          {viewMode === 'DMN' && user && <DMNModelerComponent xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
-          {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
-          {!user && <div className="welcome-wrapper">
-                <img src="/bpmn_modeler_logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
-              <div className="welcome-title">
-                  Welcome to BPMN Modeler!
+          {(viewMode === 'BPMN' || viewMode === 'DMN') && user ? (
+              <div style={{ display: 'flex', width: '100%', overflow: 'hidden' }}>
+                  {isProjectViewerOpen && (
+                      <div style={{ width: '250px', minWidth: '250px', borderRight: '2px solid #e0e0e0', backgroundColor: '#efefef', overflowY: 'auto', zIndex: 900 }}>
+                        <div style={{ height: '2px', width: '100%', backgroundColor: '#e0e0e0'}}></div>
+                          {getSidePanelItems().map(item => (
+                              <div
+                                  key={item.id}
+                                  onClick={() => handleSidePanelItemClick(item)}
+                                  style={{
+                                      cursor: 'pointer',
+                                      padding: '0.5rem 1rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      backgroundColor: (model.id === item.id || folder.id === item.id) ? '#e0e0e0' : 'transparent',
+                                      borderBottom: '2px solid #e0e0e0',
+                                      color: '#161616'
+                                  }}
+                                  title={item.name}
+                              >
+                                  {item.type === 'folder' && <Folder />}
+                                  {item.type === 'folderUp' && <FolderParent />}
+                                  {item.type === 'bpmn' && <DecisionTree />}
+                                  {item.type === 'dmn' && <TableSplit />}
+                                  <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {item.name}
+                                  </span>
+                              </div>
+                          ))}
+                      </div>
+                  )}
+                  <div style={{ flex: 1, position: 'relative', height: '100%', overflow: 'hidden' }}>
+                      <div className="modeler-toolbar-background"></div>
+                      <div className="modeler-toolbar">
+                          <div className="modeler-toolbar-left">
+                                <Button
+                                    onClick={() => setIsProjectViewerOpen(!isProjectViewerOpen)}
+                                    className={isProjectViewerOpen ? "selected" : ""}
+                                    hasIconOnly
+                                    renderIcon={isProjectViewerOpen ? SidePanelClose : SidePanelOpen}
+                                    iconDescription={isProjectViewerOpen ? "Close project viewer" : "Open project viewer"}
+                                    tooltipPosition="right"
+                                />
+                              {viewMode === 'BPMN' &&
+                                  <Button
+                                      onClick={() => downloadXmlAsBpmn(model)}
+                                      className="download-bpmn-button"
+                                      hasIconOnly
+                                      renderIcon={Download}
+                                      iconDescription="Download BPMN"
+                                      tooltipPosition="right"
+                                  />}
+                              {viewMode === 'BPMN' &&
+                                  <Button
+                                      onClick={onDownloadAsPng}
+                                      className="download-png-button"
+                                      hasIconOnly
+                                      renderIcon={PNG}
+                                      iconDescription="Download as image"
+                                      tooltipPosition="right"
+                                  />}
+                          </div>
+                          <div className="modeler-toolbar-right">
+                              {viewMode === 'BPMN' &&
+                                  <Toggle
+                                      className="auto-save-toggle"
+                                      id="auto-save"
+                                      labelText="Auto save"
+                                      hideLabel={true}
+                                      size="sm"
+                                      toggled={autoSave}
+                                      onToggle={(checked) => {
+                                          if (checked) {
+                                              saveBPMNModel(model);
+                                              setChanges(false);
+                                          }
+                                          setAutoSave(checked)
+                                      }}
+                                  />}
+                              {viewMode === 'BPMN' && changes &&
+                                  <Button onClick={() => onSaveModelClick(model)}>
+                                      <Save className="project-name-icon"/> Save
+                                  </Button>}
+                              {viewMode === 'BPMN' && !changes &&
+                                  <Button onClick={() => onSaveModelClick(model)} disabled>
+                                      <Save className="project-name-icon"/> Save
+                                  </Button>}
+                              {viewMode === 'DMN' &&
+                                  <Button onClick={() => onSaveDMNClick(model)}>
+                                      Save
+                                  </Button>}
+                          </div>
+                      </div>
+                      {viewMode === 'BPMN' && <BPMNModelerComponent key={model.id} ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
+                      {viewMode === 'DMN' && <DMNModelerComponent key={model.id} ref={dmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
+                  </div>
               </div>
-              <div className="welcome-subtitle">
-                  the open-source BPMN & DMN modeling collaboration tool
-              </div>
-          </div>}
+          ) : (
+              <>
+                  {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
+                  {!user && <div className="welcome-wrapper">
+                      <img src="/bpmn_modeler_logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
+                      <div className="welcome-title">
+                          Welcome to BPMN Modeler!
+                      </div>
+                      <div className="welcome-subtitle">
+                          the open-source BPMN & DMN modeling collaboration tool
+                      </div>
+                  </div>}
+              </>
+          )}
           {(viewMode !== 'BPMN' && viewMode !== 'DMN') && <Tile className="footer">
               Version: {config.bpmnModelerVersion} - powered by <a href="https://www.valtimo.nl" target="valtimo">Valtimo</a>
           </Tile>}

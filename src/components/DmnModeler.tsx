@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import DmnModeler from 'dmn-js/lib/Modeler';
 import 'dmn-js/dist/assets/diagram-js.css';
 import 'dmn-js/dist/assets/dmn-js-decision-table.css';
@@ -10,8 +10,9 @@ import 'dmn-js/dist/assets/dmn-font/css/dmn.css';
 import 'dmn-js/dist/assets/dmn-font/css/dmn-embedded.css';
 import 'dmn-js/dist/assets/dmn-font/css/dmn-codes.css';
 
-const DMNModelerComponent = ({ xml, viewPosition, onDMNChange, onViewPositionChange }) => {
+const DMNModelerComponent = forwardRef(({ xml, viewPosition, onDMNChange, onViewPositionChange }, ref) => {
     const dmnModelerRef = useRef(null);
+    const modelerInstance = useRef(null);
 
     useEffect(() => {
         const dmnModeler = new DmnModeler({
@@ -20,6 +21,7 @@ const DMNModelerComponent = ({ xml, viewPosition, onDMNChange, onViewPositionCha
                 bindTo: window,
             },
         });
+        modelerInstance.current = dmnModeler;
         dmnModeler.importXML(xml).then(() => {
             if (viewPosition) {
                 setViewPosition(dmnModeler);
@@ -58,6 +60,17 @@ const DMNModelerComponent = ({ xml, viewPosition, onDMNChange, onViewPositionCha
         };
     }, [xml, viewPosition, onDMNChange, onViewPositionChange]);
 
+    useImperativeHandle(ref, () => ({
+        handleResize: () => {
+            if (modelerInstance.current) {
+                const activeViewer = modelerInstance.current.getActiveViewer();
+                if (activeViewer) {
+                    activeViewer.get('canvas').resized();
+                }
+            }
+        }
+    }));
+
     function getViewPosition(modeler) {
         const canvas = modeler.getActiveViewer().get('canvas');
         const zoom = canvas.zoom();
@@ -81,6 +94,6 @@ const DMNModelerComponent = ({ xml, viewPosition, onDMNChange, onViewPositionCha
     }
 
     return <div ref={dmnModelerRef} className="dmn-modeler" />;
-};
+});
 
 export default DMNModelerComponent;

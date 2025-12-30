@@ -52,6 +52,12 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
     useImperativeHandle(ref, () => ({
         saveSVG: () => {
             return modelerInstance.current.saveSVG();
+        },
+        handleResize: () => {
+            if (modelerInstance.current) {
+                const canvas = modelerInstance.current.get('canvas');
+                canvas.resized();
+            }
         }
     }));
 
