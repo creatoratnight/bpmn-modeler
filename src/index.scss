@@ -652,7 +652,26 @@ a {
     fill: var(--cds-button-primary, #0f62fe) !important;
 }
 
+.cds--batch-actions {
+  background-color: #f4f4f4;
+}
+
+.cds--batch-summary {
+  background-color: #f4f4f4;
+  color: black;
+}
+
+.cds--btn--primary:active {
+  background-color: #2b79bd;
+}
+
+.cds--batch-actions--active {
+    transform: translateX(0px);
+}
+
 /* END: Carbon Design System overrides */
+
+/* START: Minimap overrides */
 
 .djs-minimap {
   width: 0px;
