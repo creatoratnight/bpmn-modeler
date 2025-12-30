@@ -378,18 +378,22 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     };
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>, projectId: string) => {
-        const file = event.target.files?.[0];
+        const files = event.target.files;
 
-        const reader = new FileReader();
-        reader.onload = (e: ProgressEvent<FileReader>) => {
-            const text = e.target?.result;
-            if (file.name.endsWith('.bpmn')) {
-                handleUploadBPMNModel(projectId, text as string, file.name);
-            } else if (file.name.endsWith('.dmn')) {
-                handleUploadDMNModel(projectId, text as string, file.name);
-            }
-        };
-        reader.readAsText(file);
+        if (files && files.length > 0) {
+            Array.from(files).forEach((file) => {
+                const reader = new FileReader();
+                reader.onload = (e: ProgressEvent<FileReader>) => {
+                    const text = e.target?.result;
+                    if (file.name.endsWith('.bpmn')) {
+                        handleUploadBPMNModel(projectId, text as string, file.name);
+                    } else if (file.name.endsWith('.dmn')) {
+                        handleUploadDMNModel(projectId, text as string, file.name);
+                    }
+                };
+                reader.readAsText(file);
+            });
+        }
     };
 
     const handleUploadBPMNModel = (projectId: string, xml: string, filename) => {
@@ -866,7 +870,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                     <div className="cds--toolbar-title">
                                                         Models
                                                     </div>
-                                                    <input style={{display: 'none'}} type="file" accept=".bpmn, .dmn"
+                                                    <input style={{display: 'none'}} type="file" accept=".bpmn, .dmn" multiple
                                                            ref={fileInputRef}
                                                            onChange={(event) => handleFileChange(event, currentProject.id)}/>
                                                     <Button onClick={handleUploadButtonClick}><Upload
@@ -905,7 +909,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                             setSelectedProjectId(currentProject.id);
                                                                         }}><DecisionTree className="project-name-icon"/> Add BPMN
                                                                         </Button>
-                                                                        <input style={{display: 'none'}} type="file" accept=".bpmn, .dmn"
+                                                                        <input style={{display: 'none'}} type="file" accept=".bpmn, .dmn" multiple
                                                                             ref={fileInputRef}
                                                                             onChange={(event) => handleFileChange(event, currentProject.id)}/>
                                                                         <Button onClick={handleUploadButtonClick}><Upload
