@@ -20,9 +20,14 @@ import {
     TableHeader,
     TableRow,
     TableToolbar,
-    TableToolbarContent, Tile
+    TableToolbarContent, Tile,
+    TableBatchActions,
+    TableBatchAction,
+    TableSelectAll,
+    TableSelectRow,
+    Checkbox
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent, TrashCan, Move} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -52,6 +57,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     const [selectedProjectId, setSelectedProjectId] = useState(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedModel, setSelectedModel] = useState({});
+    const [bulkMoveModels, setBulkMoveModels] = useState([]);
     const [confirmModalContent, setConfirmModalContent] = useState({
         message: '', onConfirm: () => {
         }
@@ -330,16 +336,20 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
     const handleMoveModel = (newFolderId) => {
         const db = getDatabase();
-        const modelRef = ref(db, `bpmnModels/${selectedModel.id}`);
+        const updates = {};
+        const modelsToUpdate = bulkMoveModels.length > 0 ? bulkMoveModels : [selectedModel];
 
-        update(modelRef, {
-            folder: newFolderId || null,
-            updatedAt: new Date().toISOString()
-        })
+        modelsToUpdate.forEach(model => {
+            updates[`bpmnModels/${model.id}/folder`] = newFolderId || null;
+            updates[`bpmnModels/${model.id}/updatedAt`] = new Date().toISOString();
+        });
+
+        update(ref(db), updates)
             .then(() => {
                 updateLastChangedDate(currentProject.id);
                 fetchUserProjects(user.uid);
-                toastr.success("Model moved successfully");
+                toastr.success(modelsToUpdate.length > 1 ? "Models moved successfully" : "Model moved successfully");
+                setBulkMoveModels([]);
             })
             .catch((error) => toastr.error("Error moving model: ", error));
     }
@@ -606,6 +616,24 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     }
 
+    const onBulkDeleteModels = (models) => {
+        const db = getDatabase();
+        const updates = {};
+        models.forEach(model => {
+            updates[`bpmnModels/${model.id}`] = null;
+            updates[`projects/${currentProject.id}/models/${model.id}`] = null;
+        });
+
+        update(ref(db), updates).then(() => {
+            updateLastChangedDate(currentProject.id);
+            toastr.success(`${models.length} models deleted successfully`);
+            fetchUserProjects(user.uid);
+            setIsConfirmModalOpen(false);
+        }).catch((error) => {
+            toastr.error('Error deleting models: ', error);
+        });
+    }
+
     const onDeleteProject = () => {
         const db = getDatabase();
         const modelRef = ref(db, `projects/${currentProject.id}`);
@@ -850,6 +878,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                         <div className="project-wrapper">
                             <div className="project-models-wrapper">
                                 <DataTable
+                                    isSelectable
                                     rows={sortRows([{'type': 'folderUp', 'id': 'folderUp', 'name': '..', 'folder': ''}, ...currentProject?.folders.sort((a, b) => a.name.localeCompare(b.name)), ...currentProject.models.sort((a, b) => a.name.localeCompare(b.name))], sortHeaderModels, sortDirectionModels)
                                             .filter(model => model?.folder === selectedFolder?.id || (model?.type === 'folderUp' && selectedFolder?.id))
                                             .map(model => ({
@@ -867,9 +896,56 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                         {key: 'date', header: 'Last Changed'},
                                         {key: 'actions', header: 'Options'},
                                     ]}
-                                    render={({rows, headers, getHeaderProps}) => (
-                                        <TableContainer title="Models">
+                                    render={({rows, headers, getHeaderProps, getSelectionProps, getBatchActionProps, selectedRows, selectRow}) => {
+                                        const selectableRows = rows.filter(row => {
+                                            const typeCell = row.cells.find(c => c.info.header === 'type');
+                                            const type = typeCell ? typeCell.value : '';
+                                            return type === 'bpmn' || type === 'dmn';
+                                        });
+                                        const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => r.isSelected);
+                                        const someSelectableSelected = selectableRows.some(r => r.isSelected) && !allSelectableSelected;
+
+                                        return (
+                                            <TableContainer title="Models">
                                             <TableToolbar>
+                                                <TableBatchActions {...getBatchActionProps()}>
+                                                    <TableBatchAction
+                                                        tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
+                                                        renderIcon={TrashCan}
+                                                        onClick={() => {
+                                                            const validRows = selectedRows.filter(r => {
+                                                                const item = [...currentProject.folders, ...currentProject.models].find(m => m.id === r.id);
+                                                                return item && item.type !== 'folder' && item.type !== 'folderUp';
+                                                            });
+                                                            if(validRows.length > 0) {
+                                                                const models = validRows.map(r => currentProject.models.find(m => m.id === r.id));
+                                                                openConfirmModal(
+                                                                    `Are you sure you want to delete ${models.length} models?`,
+                                                                    () => onBulkDeleteModels(models)
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </TableBatchAction>
+                                                    <TableBatchAction
+                                                        tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
+                                                        renderIcon={Move}
+                                                        onClick={() => {
+                                                            const validRows = selectedRows.filter(r => {
+                                                                const item = [...currentProject.folders, ...currentProject.models].find(m => m.id === r.id);
+                                                                return item && item.type !== 'folder' && item.type !== 'folderUp';
+                                                            });
+                                                            if(validRows.length > 0) {
+                                                                const models = validRows.map(r => currentProject.models.find(m => m.id === r.id));
+                                                                setBulkMoveModels(models);
+                                                                setIsMoveModelModalOpen(true);
+                                                            }
+                                                        }}
+                                                    >
+                                                        Move to...
+                                                    </TableBatchAction>
+                                                </TableBatchActions>
                                                 <TableToolbarContent>
                                                     <div className="cds--toolbar-title">
                                                         Models
@@ -926,7 +1002,22 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                 )}
                                                 <TableHead>
                                                     <TableRow>
+                                                        <TableSelectAll
+                                                            {...getSelectionProps()}
+                                                            checked={allSelectableSelected}
+                                                            indeterminate={someSelectableSelected}
+                                                            onSelect={() => {
+                                                                if (allSelectableSelected) {
+                                                                    selectableRows.forEach(r => selectRow(r.id));
+                                                                } else {
+                                                                    selectableRows.forEach(r => {
+                                                                        if (!r.isSelected) selectRow(r.id);
+                                                                    });
+                                                                }
+                                                            }}
+                                                        />
                                                         {headers.map(header => {
+                                                            if (header.key === 'actions') return <TableHeader key={header.key} />;
                                                             const { key, ...headerProps } = getHeaderProps({
                                                                 header,
                                                                 isSortable: header.key !== 'actions',
@@ -949,10 +1040,24 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         const model = [{'type': 'folderUp', 'id': 'folderUp', 'name': '..'}, ...currentProject.folders, ...currentProject.models].filter(
                                                             (model) => model.id === row.id
                                                         )[0];
+                                                        const isFolder = model?.type === 'folder' || model?.type === 'folderUp';
+                                                        const { onSelect, ...selectionProps } = getSelectionProps({ row });
                                                         return (
                                                             <TableRow key={row.id}
                                                                       onClick={() => onOpenModel(currentProject, model)}
                                                                       style={model?.type === 'dmn' ? { cursor: 'not-allowed' } : { }}>
+                                                                <TableCell className="cds--table-column-checkbox" onClick={(e) => e.stopPropagation()}>
+                                                                    <Checkbox
+                                                                        {...selectionProps}
+                                                                        id={selectionProps.id}
+                                                                        labelText={selectionProps['aria-label']}
+                                                                        hideLabel
+                                                                        disabled={isFolder}
+                                                                        onChange={(event) => {
+                                                                            onSelect(event);
+                                                                        }}
+                                                                    />
+                                                                </TableCell>
                                                                 {row.cells.map((cell) => <TableCell key={cell.id}>
                                                                         {cell.info.header === 'actions' ? (
                                                                             <OverflowMenu flipped>
@@ -1047,7 +1152,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                 </TableBody>
                                             </Table>
                                         </TableContainer>
-                                    )}
+                                    );}}
                                 />
                             </div>
                             {!isMembersPanelOpen && (
@@ -1235,10 +1340,13 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
             <MoveModelModal
                 isOpen={isMoveModelModalOpen}
-                onClose={() => setIsMoveModelModalOpen(false)}
+                onClose={() => {
+                    setIsMoveModelModalOpen(false);
+                    setBulkMoveModels([]);
+                }}
                 onMoveModel={handleMoveModel}
                 folders={currentProject?.folders || []}
-                currentFolderId={selectedModel?.folder}
+                currentFolderId={bulkMoveModels.length > 0 ? '' : selectedModel?.folder}
             />
 
             <InviteModal
