@@ -3,6 +3,7 @@ import BpmnModeler from 'bpmn-js/lib/Modeler';
 import BpmnColorPickerModule from 'bpmn-js-color-picker';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
+import minimapModule from 'diagram-js-minimap';
 
 
 const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onViewPositionChange }, ref) => {
@@ -16,7 +17,8 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
                 bindTo: window,
             },
             additionalModules: [
-                BpmnColorPickerModule
+                BpmnColorPickerModule,
+                minimapModule
             ]
         });
 
