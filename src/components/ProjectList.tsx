@@ -842,7 +842,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                         <div className="project-wrapper">
                             <div className="project-models-wrapper">
                                 <DataTable
-                                    rows={sortRows([{'type': 'folderUp', 'id': 'folderUp', 'name': '..', 'folder': ''}, ...currentProject?.folders, ...currentProject.models], sortHeaderModels, sortDirectionModels)
+                                    rows={sortRows([{'type': 'folderUp', 'id': 'folderUp', 'name': '..', 'folder': ''}, ...currentProject?.folders.sort((a, b) => a.name.localeCompare(b.name)), ...currentProject.models.sort((a, b) => a.name.localeCompare(b.name))], sortHeaderModels, sortDirectionModels)
                                             .filter(model => model?.folder === selectedFolder?.id || (model?.type === 'folderUp' && selectedFolder?.id))
                                             .map(model => ({
                                         id: model.id || '',
