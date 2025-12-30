@@ -766,44 +766,48 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                         )}
                                         <TableHead>
                                             <TableRow>
-                                                {headers.map(header => (
-                                                    <TableHeader
-                                                        {...getHeaderProps({
-                                                            header,
-                                                            isSortable: header.key !== 'actions',
-                                                            onClick: () => {
-                                                                const newDirection = sortDirection === 'ASC' ? 'DESC' : 'ASC';
-                                                                setSortHeader(header.key);
-                                                                setSortDirection(sortDirection === 'NONE' || header.key !== sortHeader ? 'ASC' : newDirection);
-                                                            },
-                                                        })}
-                                                    >
-                                                        {header.header}
-                                                    </TableHeader>
-                                                ))}
+                                                {headers.map(header => {
+                                                    const { key, ...headerProps } = getHeaderProps({
+                                                        header,
+                                                        isSortable: header.key !== 'actions',
+                                                        onClick: () => {
+                                                            const newDirection = sortDirection === 'ASC' ? 'DESC' : 'ASC';
+                                                            setSortHeader(header.key);
+                                                            setSortDirection(sortDirection === 'NONE' || header.key !== sortHeader ? 'ASC' : newDirection);
+                                                        },
+                                                    });
+                                                    return (
+                                                        <TableHeader key={key} {...headerProps}>
+                                                            {header.header}
+                                                        </TableHeader>
+                                                    );
+                                                })}
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {rows.map(row => (
-                                                <TableRow {...getRowProps({row})}
-                                                          onClick={() => onOpenProject(projects.filter((project) => project.id === row.id)[0])}>
-                                                    {row.cells.map(cell => (
-                                                        <TableCell key={cell.id}>
-                                                            {cell.info.header === 'members' ? (
-                                                                renderMembersCell(cell.value) // Use the rendering function for the members cell
-                                                            ) : cell.info.header === 'name' ? (
-                                                                <div className="project-name-with-icon">
-                                                                    {<Folders
-                                                                            className="project-name-icon"/>} {cell.value}
-                                                                </div>
-                                                            ) :
-                                                            (
-                                                                cell.value
-                                                            )}
-                                                        </TableCell>
-                                                    ))}
-                                                </TableRow>
-                                            ))}
+                                            {rows.map(row => {
+                                                const { key, ...rowProps } = getRowProps({ row });
+                                                return (
+                                                    <TableRow key={key} {...rowProps}
+                                                              onClick={() => onOpenProject(projects.filter((project) => project.id === row.id)[0])}>
+                                                        {row.cells.map(cell => (
+                                                            <TableCell key={cell.id}>
+                                                                {cell.info.header === 'members' ? (
+                                                                    renderMembersCell(cell.value) // Use the rendering function for the members cell
+                                                                ) : cell.info.header === 'name' ? (
+                                                                    <div className="project-name-with-icon">
+                                                                        {<Folders
+                                                                                className="project-name-icon"/>} {cell.value}
+                                                                    </div>
+                                                                ) :
+                                                                (
+                                                                    cell.value
+                                                                )}
+                                                            </TableCell>
+                                                        ))}
+                                                    </TableRow>
+                                                );
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </TableContainer>
@@ -922,8 +926,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                 )}
                                                 <TableHead>
                                                     <TableRow>
-                                                        {headers.map(header => (
-                                                            <TableHeader key={header.key} {...getHeaderProps({
+                                                        {headers.map(header => {
+                                                            const { key, ...headerProps } = getHeaderProps({
                                                                 header,
                                                                 isSortable: header.key !== 'actions',
                                                                 onClick: () => {
@@ -931,10 +935,13 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                     setSortHeaderModels(header.key);
                                                                     setSortDirectionModels(sortDirection === 'NONE' || header.key !== sortHeader ? 'ASC' : newDirection);
                                                                 },
-                                                            })}>
-                                                                {header.header}
-                                                            </TableHeader>
-                                                        ))}
+                                                            });
+                                                            return (
+                                                                <TableHeader key={key} {...headerProps}>
+                                                                    {header.header}
+                                                                </TableHeader>
+                                                            );
+                                                        })}
                                                     </TableRow>
                                                 </TableHead>
                                                 <TableBody>
@@ -1089,50 +1096,56 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                 <Table>
                                                     <TableHead>
                                                         <TableRow>
-                                                            {headers.map((header) => (
-                                                                <TableHeader {...getHeaderProps({header})}>
-                                                                    {header.header}
-                                                                </TableHeader>
-                                                            ))}
+                                                            {headers.map((header) => {
+                                                                const { key, ...headerProps } = getHeaderProps({header});
+                                                                return (
+                                                                    <TableHeader key={key} {...headerProps}>
+                                                                        {header.header}
+                                                                    </TableHeader>
+                                                                );
+                                                            })}
                                                         </TableRow>
                                                     </TableHead>
                                                     <TableBody>
-                                                        {rows.map((row) => (
-                                                            <TableRow key={row.id} {...getRowProps({row})}>
-                                                                {row.cells.map((cell) => (
-                                                                    <TableCell key={cell.id}>
-                                                                        {cell.info.header === 'avatar' ? (
-                                                                            <img src={cell.value} alt="user-avatar"
-                                                                                    style={{
-                                                                                        width: '32px',
-                                                                                        height: '32px',
-                                                                                        borderRadius: '16px'
-                                                                                    }}/>
-                                                                        ) : cell.info.header === 'actions' && currentProject.ownerId === user.uid && cell.value.id !== user.uid ? (
-                                                                            <OverflowMenu flipped>
-                                                                                <OverflowMenuItem
-                                                                                    itemText="Remove member"
-                                                                                    isDelete
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation(); // Prevent triggering row onClick
-                                                                                        openConfirmModal(
-                                                                                            `Are you sure you want to remove ${cell.value.displayName} from this project?`,
-                                                                                            () => handleRemoveMember(currentProject.id, cell.value.id)
-                                                                                        );
-                                                                                    }}
-                                                                                />
-                                                                            </OverflowMenu>
-                                                                        ) : cell.info.header === 'name' ? (
-                                                                            cell.value
-                                                                        ) : cell.info.header === 'role' ? (
-                                                                            cell.value
-                                                                        ) : (
-                                                                            <></>
-                                                                        )}
-                                                                    </TableCell>
-                                                                ))}
-                                                            </TableRow>
-                                                        ))}
+                                                        {rows.map((row) => {
+                                                            const { key, ...rowProps } = getRowProps({ row });
+                                                            return (
+                                                                <TableRow key={key} {...rowProps}>
+                                                                    {row.cells.map((cell) => (
+                                                                        <TableCell key={cell.id}>
+                                                                            {cell.info.header === 'avatar' ? (
+                                                                                <img src={cell.value} alt="user-avatar"
+                                                                                        style={{
+                                                                                            width: '32px',
+                                                                                            height: '32px',
+                                                                                            borderRadius: '16px'
+                                                                                        }}/>
+                                                                            ) : cell.info.header === 'actions' && currentProject.ownerId === user.uid && cell.value.id !== user.uid ? (
+                                                                                <OverflowMenu flipped>
+                                                                                    <OverflowMenuItem
+                                                                                        itemText="Remove member"
+                                                                                        isDelete
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation(); // Prevent triggering row onClick
+                                                                                            openConfirmModal(
+                                                                                                `Are you sure you want to remove ${cell.value.displayName} from this project?`,
+                                                                                                () => handleRemoveMember(currentProject.id, cell.value.id)
+                                                                                            );
+                                                                                        }}
+                                                                                    />
+                                                                                </OverflowMenu>
+                                                                            ) : cell.info.header === 'name' ? (
+                                                                                cell.value
+                                                                            ) : cell.info.header === 'role' ? (
+                                                                                cell.value
+                                                                            ) : (
+                                                                                <></>
+                                                                            )}
+                                                                        </TableCell>
+                                                                    ))}
+                                                                </TableRow>
+                                                            );
+                                                        })}
                                                     </TableBody>
                                                     {rows.length === 1 && (
                                                         <TableBody>
