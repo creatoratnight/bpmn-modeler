@@ -5,8 +5,10 @@ const RenameProjectModal = ({ isOpen, onClose, onRenameProject, currentName }) =
     const [newProjectName, setNewProjectName] = useState('');
 
     useEffect(() => {
-                setNewProjectName(currentName);
-            }, [currentName]);
+        if (isOpen) {
+            setNewProjectName(currentName || '');
+        }
+    }, [isOpen, currentName]);
 
     const handleRenameProject = () => {
         onRenameProject(newProjectName);
