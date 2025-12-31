@@ -816,7 +816,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                         {rows.length === 0 && (
                                             <TableBody>
                                                 <TableRow>
-                                                    <TableCell colSpan={headers.length}>
+                                                    <TableCell colSpan={headers.length + 1}>
                                                         <div style={{ textAlign: 'center', padding: '50px' }}>
                                                             <Folders size={64} style={{ fill: '#8d8d8d' }} />
                                                             <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>
@@ -917,7 +917,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                             <div className="project-models-wrapper">
                                 <DataTable
                                     isSelectable
-                                    rows={sortRows([{'type': 'folderUp', 'id': 'folderUp', 'name': '..', 'folder': ''}, ...currentProject?.folders.sort((a, b) => a.name.localeCompare(b.name)), ...currentProject.models.sort((a, b) => a.name.localeCompare(b.name))], sortHeaderModels, sortDirectionModels)
+                                    rows={sortRows([{'type': 'folderUp', 'id': 'folderUp', 'name': '.. / ' + selectedFolder?.name || '', 'folder': ''}, ...currentProject?.folders.sort((a, b) => a.name.localeCompare(b.name)), ...currentProject.models.sort((a, b) => a.name.localeCompare(b.name))], sortHeaderModels, sortDirectionModels)
                                             .filter(model => model?.folder === selectedFolder?.id || (model?.type === 'folderUp' && selectedFolder?.id))
                                             .map(model => ({
                                         id: model.id || '',
@@ -1046,7 +1046,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                 {rows.length === 0 && (
                                                     <TableBody>
                                                         <TableRow>
-                                                            <TableCell colSpan={headers.length}>
+                                                            <TableCell colSpan={headers.length + 1}>
                                                                 <div style={{ textAlign: 'center', padding: '50px' }}>
                                                                     <DecisionTree size={64} style={{ fill: '#8d8d8d' }} />
                                                                     <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>
@@ -1208,7 +1208,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                                     model?.type === 'dmn' ? <TableSplit
                                                                                         className="project-name-icon"/> : 
                                                                                         model?.type === 'folder' ? <Folder className="project-name-icon"/> :
-                                                                                            <FolderParent className="project-name-icon"/>} {cell.value}
+                                                                                            <FolderParent className="project-name-icon"/>} 
+                                                                                            {model?.type === 'folderUp' || model?.type === 'folder' ? <strong>{cell.value}</strong> : cell.value}
                                                                             </div>
 
                                                                         ) : model?.type != 'folderUp' ? (
@@ -1325,7 +1326,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                     {rows.length === 1 && (
                                                         <TableBody>
                                                             <TableRow>
-                                                                <TableCell colSpan={headers.length}>
+                                                                <TableCell colSpan={headers.length + 1}>
                                                                     <div style={{ textAlign: 'center', padding: '50px' }}>
                                                                         <UserFollow size={64} style={{ fill: '#8d8d8d' }} />
                                                                         <p style={{ color: '#8d8d8d', marginTop: '1rem' }}>

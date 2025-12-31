@@ -338,7 +338,7 @@ function App() {
         let items = [];
 
         if (currentFolderId) {
-            items.push({ type: 'folderUp', name: '..', id: 'up' });
+            items.push({ type: 'folderUp', name: '.. / ' + folder.name || '', id: 'up' });
         } else {
             const folders = (project.folders || []).map(f => ({ ...f, type: 'folder' }));
             items = [...items, ...folders];
@@ -360,6 +360,8 @@ function App() {
 
     const handleSidePanelItemClick = (item) => {
         if (item.id === model.id) return;
+
+        if (item.type === 'dmn') return;
 
         if (changes) {
             toastr.warning("You have unsaved changes. Please save them before switching models.");
@@ -458,7 +460,7 @@ function App() {
                                   key={item.id}
                                   onClick={() => handleSidePanelItemClick(item)}
                                   style={{
-                                      cursor: 'pointer',
+                                      cursor: item.type === 'dmn' ? 'not-allowed' : 'pointer',
                                       padding: '0.5rem 1rem',
                                       display: 'flex',
                                       alignItems: 'center',
@@ -473,7 +475,7 @@ function App() {
                                   {item.type === 'bpmn' && <DecisionTree />}
                                   {item.type === 'dmn' && <TableSplit />}
                                   <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {item.name}
+                                      {item.type === 'folder' || item.type === 'folderUp' ? <strong>{item.name}</strong> : item.name}
                                   </span>
                               </div>
                           ))}
