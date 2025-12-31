@@ -372,6 +372,7 @@ function App() {
             setfolder(item.type === 'folderUp' ? {} : item);
         } else {
             setModel(item);
+            setViewPosition(null);
             setViewMode(item.type === 'bpmn' ? 'BPMN' : 'DMN');
         }
     };
@@ -490,7 +491,7 @@ function App() {
                                     className={isProjectViewerOpen ? "selected" : ""}
                                     hasIconOnly
                                     renderIcon={isProjectViewerOpen ? SidePanelClose : SidePanelOpen}
-                                    iconDescription={isProjectViewerOpen ? "Close project viewer" : "Open project viewer"}
+                                    iconDescription={isProjectViewerOpen ? "Close project panel" : "Open project panel"}
                                     tooltipPosition="right"
                                 />
                               {viewMode === 'BPMN' &&
