@@ -34,6 +34,10 @@ function App() {
         const saved = localStorage.getItem('isProjectViewerOpen');
         return saved ? JSON.parse(saved) : false;
     });
+    const [sidePanelWidth, setSidePanelWidth] = useState(() => {
+        const saved = localStorage.getItem('sidePanelWidth');
+        return saved ? parseInt(saved, 10) : 250;
+    });
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [userAvatar, setUserAvatar] = useState('user.png');
@@ -43,6 +47,7 @@ function App() {
     const autoSaveRef = useRef(autoSave);
     const modelRef = useRef(model);
     const projectRef = useRef(project);
+    const isResizingRef = useRef(false);
 
     useEffect(() => {
         autoSaveRef.current = autoSave;
@@ -62,6 +67,31 @@ function App() {
     }, [isProjectViewerOpen]);
 
     useEffect(() => {
+        localStorage.setItem('sidePanelWidth', sidePanelWidth.toString());
+    }, [sidePanelWidth]);
+
+    const startResizing = useCallback(() => {
+        isResizingRef.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        isResizingRef.current = false;
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+    }, []);
+
+    const resize = useCallback((mouseMoveEvent) => {
+        if (isResizingRef.current) {
+            const newWidth = mouseMoveEvent.clientX;
+            if (newWidth > 150 && newWidth < 800) {
+                setSidePanelWidth(newWidth);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
         setTimeout(() => {
             if (viewMode === 'BPMN' && bpmnModelerRef.current) {
                 bpmnModelerRef.current.handleResize();
@@ -71,6 +101,15 @@ function App() {
             }
         }, 100);
     }, [isProjectViewerOpen, viewMode]);
+
+    useEffect(() => {
+        window.addEventListener("mousemove", resize);
+        window.addEventListener("mouseup", stopResizing);
+        return () => {
+            window.removeEventListener("mousemove", resize);
+            window.removeEventListener("mouseup", stopResizing);
+        };
+    }, [resize, stopResizing]);
 
     toastr.options = {
         closeButton: false,
@@ -454,8 +493,9 @@ function App() {
           {(viewMode === 'BPMN' || viewMode === 'DMN') && user ? (
               <div style={{ display: 'flex', width: '100%', overflow: 'hidden' }}>
                   {isProjectViewerOpen && (
-                      <div style={{ width: '250px', minWidth: '250px', maxHeight: 'calc(100vh - 64px)', borderRight: '2px solid #e0e0e0', backgroundColor: '#efefef', overflowY: 'auto', zIndex: 900 }}>
-                        <div style={{ height: '2px', width: '250px', backgroundColor: '#e0e0e0', position: 'absolute'}}></div>
+                      <div style={{ width: `${sidePanelWidth}px`, minWidth: `${sidePanelWidth}px`, maxHeight: 'calc(100vh - 64px)', borderRight: '2px solid #e0e0e0', backgroundColor: '#efefef', zIndex: 900, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ height: '2px', width: '100%', backgroundColor: '#e0e0e0', flexShrink: 0 }}></div>
+                        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
                           {getSidePanelItems().map(item => (
                               <div
                                   key={item.id}
@@ -480,6 +520,19 @@ function App() {
                                   </span>
                               </div>
                           ))}
+                        </div>
+                        <div
+                            onMouseDown={startResizing}
+                            style={{
+                                width: '5px',
+                                cursor: 'col-resize',
+                                height: '100%',
+                                position: 'absolute',
+                                right: 0,
+                                top: 0,
+                                zIndex: 1000
+                            }}
+                        />
                       </div>
                   )}
                   <div style={{ flex: 1, position: 'relative', height: '100%', overflow: 'hidden' }}>
@@ -491,7 +544,7 @@ function App() {
                                     className={isProjectViewerOpen ? "selected" : ""}
                                     hasIconOnly
                                     renderIcon={isProjectViewerOpen ? SidePanelClose : SidePanelOpen}
-                                    iconDescription={isProjectViewerOpen ? "Close project panel" : "Open project panel"}
+                                    iconDescription={isProjectViewerOpen ? "Close project " : "Open project viewer"}
                                     tooltipPosition="right"
                                 />
                               {viewMode === 'BPMN' &&
