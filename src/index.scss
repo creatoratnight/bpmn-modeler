@@ -704,9 +704,11 @@ a {
 .djs-minimap.open .toggle {
   position: absolute;
   top: 0;
-  right: 310px;
-  height: 20px;
-  width: 20px;
+  right: 0;
+  height: 23px;
+  width: 23px;
+  border-left: 3px solid white;
+  border-bottom: 3px solid white;
   background-color: #f4f4f4;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='%23161616' fill-opacity='0.5'%3E%3Cpath d='M24 9.4L22.6 8 16 14.6 9.4 8 8 9.4 14.6 16 8 22.6 9.4 24 16 17.4 22.6 24 24 22.6 17.4 16 24 9.4z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
