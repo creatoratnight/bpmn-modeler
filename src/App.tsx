@@ -544,7 +544,7 @@ function App() {
                                     className={isProjectViewerOpen ? "selected" : ""}
                                     hasIconOnly
                                     renderIcon={isProjectViewerOpen ? SidePanelClose : SidePanelOpen}
-                                    iconDescription={isProjectViewerOpen ? "Close project " : "Open project viewer"}
+                                    iconDescription={isProjectViewerOpen ? "Close project panel" : "Open project panel"}
                                     tooltipPosition="right"
                                 />
                               {viewMode === 'BPMN' &&
