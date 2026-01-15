@@ -10,6 +10,9 @@ const RenameModelModal = ({ isOpen, onClose, onRenameModel, currentName }) => {
         }
     }, [isOpen, currentName]);
 
+    const isValidQName = (name) => /^[a-zA-Z_][\w-.]*$/.test(name);
+    const isInvalid = newModelName.length > 0 && !isValidQName(newModelName);
+
     const handleRenameModel = () => {
         onRenameModel(newModelName);
         setNewModelName('');
@@ -17,7 +20,7 @@ const RenameModelModal = ({ isOpen, onClose, onRenameModel, currentName }) => {
     };
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && newModelName.trim()) {
+        if (e.key === 'Enter' && newModelName.trim() && !isInvalid) {
             handleRenameModel();
         }
     };
@@ -25,9 +28,11 @@ const RenameModelModal = ({ isOpen, onClose, onRenameModel, currentName }) => {
     if (!isOpen) return null;
 
     return (
-        <Modal modalHeading="Rename Model" primaryButtonText="Rename model" secondaryButtonText="Cancel" open={isOpen} onRequestClose={onClose} onRequestSubmit={handleRenameModel} primaryButtonDisabled={!newModelName.trim()}>
+        <Modal modalHeading="Rename Model" primaryButtonText="Rename model" secondaryButtonText="Cancel" open={isOpen} onRequestClose={onClose} onRequestSubmit={handleRenameModel} primaryButtonDisabled={!newModelName.trim() || isInvalid}>
             <TextInput data-modal-primary-focus id="text-input-1" labelText="Model name" placeholder="New model"
                        value={newModelName}
+                       invalid={isInvalid}
+                       invalidText="Model name must be a valid QName (start with a letter or underscore, contain only alphanumeric, underscore, hyphen, period)"
                        onChange={(e) => setNewModelName(e.target.value)}
                        onKeyDown={handleKeyDown}
                        style={{
