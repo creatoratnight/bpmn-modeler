@@ -979,7 +979,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                     >
                                                         Duplicate
                                                     </TableBatchAction>
-                                                    <TableBatchAction
+                                                    {currentProject.ownerId === user.uid && <TableBatchAction
                                                         tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
                                                         renderIcon={TrashCan}
                                                         onClick={() => {
@@ -997,8 +997,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         }}
                                                     >
                                                         Delete
-                                                    </TableBatchAction>
-                                                    <TableBatchAction
+                                                    </TableBatchAction>}
+                                                    {currentProject.ownerId === user.uid && <TableBatchAction
                                                         tabIndex={getBatchActionProps().shouldShowBatchActions ? 0 : -1}
                                                         renderIcon={Move}
                                                         onClick={() => {
@@ -1014,7 +1014,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         }}
                                                     >
                                                         Move to...
-                                                    </TableBatchAction>
+                                                    </TableBatchAction>}
                                                 </TableBatchActions>
                                                 <TableToolbarContent>
                                                     <div className="cds--toolbar-title">
