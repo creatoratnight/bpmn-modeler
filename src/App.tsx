@@ -492,49 +492,59 @@ function App() {
           </Tile>
           {(viewMode === 'BPMN' || viewMode === 'DMN') && user ? (
               <div style={{ display: 'flex', width: '100%', overflow: 'hidden' }}>
-                  {isProjectViewerOpen && (
-                      <div style={{ width: `${sidePanelWidth}px`, minWidth: `${sidePanelWidth}px`, maxHeight: 'calc(100vh - 64px)', borderRight: '2px solid #e0e0e0', backgroundColor: '#efefef', zIndex: 900, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ height: '2px', width: '100%', backgroundColor: '#e0e0e0', flexShrink: 0 }}></div>
-                        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-                          {getSidePanelItems().map(item => (
-                              <div
-                                  key={item.id}
-                                  onClick={() => handleSidePanelItemClick(item)}
-                                  style={{
-                                      cursor: item.type === 'dmn' ? 'not-allowed' : 'pointer',
-                                      padding: '0.5rem 1rem',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      backgroundColor: (model.id === item.id || folder.id === item.id) ? '#e0e0e0' : 'transparent',
-                                      borderBottom: '2px solid #e0e0e0',
-                                      color: '#161616'
-                                  }}
-                                  title={item.name}
-                              >
-                                  {item.type === 'folder' && <Folder />}
-                                  {item.type === 'folderUp' && <FolderParent />}
-                                  {item.type === 'bpmn' && <DecisionTree />}
-                                  {item.type === 'dmn' && <TableSplit />}
-                                  <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {item.type === 'folder' || item.type === 'folderUp' ? <strong>{item.name}</strong> : item.name}
-                                  </span>
-                              </div>
-                          ))}
-                        </div>
-                        <div
-                            onMouseDown={startResizing}
-                            style={{
-                                width: '5px',
-                                cursor: 'col-resize',
-                                height: '100%',
-                                position: 'absolute',
-                                right: 0,
-                                top: 0,
-                                zIndex: 1000
-                            }}
-                        />
-                      </div>
-                  )}
+                  <div style={{
+                      width: isProjectViewerOpen ? `${sidePanelWidth}px` : '0px',
+                      minWidth: isProjectViewerOpen ? `${sidePanelWidth}px` : '0px',
+                      maxHeight: 'calc(100vh - 64px)',
+                      borderRight: isProjectViewerOpen ? '2px solid #e0e0e0' : '0px solid #e0e0e0',
+                      backgroundColor: '#efefef',
+                      zIndex: 900,
+                      position: 'relative',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'width 0.2s ease-in-out, min-width 0.2s ease-in-out',
+                      overflow: 'hidden'
+                  }}>
+                    <div style={{ height: '2px', width: '100%', backgroundColor: '#e0e0e0', flexShrink: 0 }}></div>
+                    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+                      {getSidePanelItems().map(item => (
+                          <div
+                              key={item.id}
+                              onClick={() => handleSidePanelItemClick(item)}
+                              style={{
+                                  cursor: item.type === 'dmn' ? 'not-allowed' : 'pointer',
+                                  padding: '0.5rem 1rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  backgroundColor: (model.id === item.id || folder.id === item.id) ? '#e0e0e0' : 'transparent',
+                                  borderBottom: '2px solid #e0e0e0',
+                                  color: '#161616'
+                              }}
+                              title={item.name}
+                          >
+                              {item.type === 'folder' && <Folder />}
+                              {item.type === 'folderUp' && <FolderParent />}
+                              {item.type === 'bpmn' && <DecisionTree />}
+                              {item.type === 'dmn' && <TableSplit />}
+                              <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {item.type === 'folder' || item.type === 'folderUp' ? <strong>{item.name}</strong> : item.name}
+                              </span>
+                          </div>
+                      ))}
+                    </div>
+                    <div
+                        onMouseDown={startResizing}
+                        style={{
+                            width: '5px',
+                            cursor: 'col-resize',
+                            height: '100%',
+                            position: 'absolute',
+                            right: 0,
+                            top: 0,
+                            zIndex: 1000
+                        }}
+                    />
+                  </div>
                   <div style={{ flex: 1, position: 'relative', height: '100%', overflow: 'hidden' }}>
                       <div className="modeler-toolbar-background"></div>
                       <div className="modeler-toolbar">

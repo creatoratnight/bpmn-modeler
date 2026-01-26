@@ -10,7 +10,7 @@ const RenameModelModal = ({ isOpen, onClose, onRenameModel, currentName }) => {
         }
     }, [isOpen, currentName]);
 
-    const isValidQName = (name) => /^[a-zA-Z_][\w-.]*$/.test(name);
+    const isValidQName = (name) => /^[a-zA-Z_][\w-.\s]*$/.test(name);
     const isInvalid = newModelName.length > 0 && !isValidQName(newModelName);
 
     const handleRenameModel = () => {
@@ -32,7 +32,7 @@ const RenameModelModal = ({ isOpen, onClose, onRenameModel, currentName }) => {
             <TextInput data-modal-primary-focus id="text-input-1" labelText="Model name" placeholder="New model"
                        value={newModelName}
                        invalid={isInvalid}
-                       invalidText="Model name must be a valid QName (start with a letter or underscore, contain only alphanumeric, underscore, hyphen, period)"
+                       invalidText="Model name must start with a letter or underscore, and contain only alphanumeric characters, underscores, hyphens, periods or spaces"
                        onChange={(e) => setNewModelName(e.target.value)}
                        onKeyDown={handleKeyDown}
                        style={{

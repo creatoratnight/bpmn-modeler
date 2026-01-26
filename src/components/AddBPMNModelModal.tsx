@@ -4,7 +4,7 @@ import {Modal, TextInput} from "@carbon/react";
 const AddBPMNModelModal = ({ isOpen, onClose, onAddModel, projectId }) => {
     const [newModelName, setNewModelName] = useState('');
 
-    const isValidQName = (name) => /^[a-zA-Z_][\w-.]*$/.test(name);
+    const isValidQName = (name) => /^[a-zA-Z_][\w-.\s]*$/.test(name);
     const isInvalid = newModelName.length > 0 && !isValidQName(newModelName);
 
     const handleAddModel = () => {
@@ -34,7 +34,7 @@ const AddBPMNModelModal = ({ isOpen, onClose, onAddModel, projectId }) => {
             <TextInput data-modal-primary-focus id="text-input-1" labelText="Model name" placeholder="New model"
                        value={newModelName}
                        invalid={isInvalid}
-                       invalidText="Model name must be a valid QName (start with a letter or underscore, contain only alphanumeric, underscore, hyphen, period)"
+                       invalidText="Model name must start with a letter or underscore, and contain only alphanumeric characters, underscores, hyphens, periods or spaces"
                        onChange={(e) => setNewModelName(e.target.value)}
                        onKeyDown={handleKeyDown}
                        style={{
