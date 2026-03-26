@@ -369,6 +369,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 ownerId: user.uid,
                 name: `${model.name} Copy`,
                 type: model.type,
+                folder: model.folder || null,
                 xmlData: model.xmlData,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
