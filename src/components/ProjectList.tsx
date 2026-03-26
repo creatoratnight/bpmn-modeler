@@ -757,6 +757,23 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     };
 
+    const handleLeaveProject = (projectId) => {
+        const db = getDatabase();
+        const memberRef = ref(db, `projects/${projectId}/members/${user.uid}`);
+        const userProjectRef = ref(db, `users/${user.uid}/projects/${projectId}`);
+
+        remove(userProjectRef);
+        remove(memberRef).then(() => {
+            updateLastChangedDate(projectId);
+            fetchUserProjects(user.uid);
+            setIsConfirmModalOpen(false);
+            toastr.success(`Successfully left the project`);
+            onNavigateHome();
+        }).catch((error) => {
+            toastr.error('Error leaving project:', error);
+        });
+    };
+
     return (
         <div className="projects-wrapper">
             {invitations.filter((invite) => invite.status === 'Pending').length > 0 &&
@@ -785,12 +802,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                     <>
                         <div className="project-heading">
                             <Heading>
-                                Projects
+                                Your Projects
                             </Heading>
                         </div>
                         <br/><br/>
                         <DataTable
-                            rows={sortRows([...projects], sortHeader, sortDirection).map(project => ({
+                            rows={sortRows([...projects].filter(project => project.ownerId === user.uid), sortHeader, sortDirection).map(project => ({
                                 id: project.id,
                                 name: project.name,
                                 diagrams: project.models.length,
@@ -879,6 +896,84 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                 </TableContainer>
                             )}
                         />
+                        {projects.filter(project => project.ownerId !== user.uid).length > 0 && (
+                            <>
+                                <br/><br/>
+                                <div className="project-heading">
+                                    <Heading>
+                                        Shared with me
+                                    </Heading>
+                                </div>
+                                <br/><br/>
+                                <DataTable
+                                    rows={sortRows([...projects].filter(project => project.ownerId !== user.uid), sortHeader, sortDirection).map(project => ({
+                                        id: project.id,
+                                        name: project.name,
+                                        diagrams: project.models.length,
+                                        date: convertDateString(project.updatedAt),
+                                        members: project.members,
+                                        actions: undefined, 
+                                    }))}
+                                    headers={[
+                                        {key: 'name', header: 'Project Name'},
+                                        {key: 'diagrams', header: 'Models'},
+                                        {key: 'date', header: 'Last Changed'},
+                                        {key: 'members', header: 'Members'},
+                                    ]}
+                                    render={({rows, headers, getHeaderProps, getRowProps}) => (
+                                        <TableContainer title="">
+                                            <Table>
+                                                <TableHead>
+                                                    <TableRow>
+                                                        {headers.map(header => {
+                                                            const { key, ...headerProps } = getHeaderProps({
+                                                                header,
+                                                                isSortable: header.key !== 'actions',
+                                                                onClick: () => {
+                                                                    const newDirection = sortDirection === 'ASC' ? 'DESC' : 'ASC';
+                                                                    setSortHeader(header.key);
+                                                                    setSortDirection(sortDirection === 'NONE' || header.key !== sortHeader ? 'ASC' : newDirection);
+                                                                },
+                                                            });
+                                                            return (
+                                                                <TableHeader key={key} {...headerProps}>
+                                                                    {header.header}
+                                                                </TableHeader>
+                                                            );
+                                                        })}
+                                                    </TableRow>
+                                                </TableHead>
+                                                <TableBody>
+                                                    {rows.map(row => {
+                                                        const { key, ...rowProps } = getRowProps({ row });
+                                                        return (
+                                                            <TableRow key={key} {...rowProps}
+                                                                      onClick={() => onOpenProject(projects.filter((project) => project.id === row.id)[0])}>
+                                                                {row.cells.map(cell => (
+                                                                    <TableCell key={cell.id}>
+                                                                        {cell.info.header === 'members' ? (
+                                                                            renderMembersCell(cell.value) // Use the rendering function for the members cell
+                                                                        ) : cell.info.header === 'name' ? (
+                                                                            <div className="project-name-with-icon">
+                                                                                {<Folders
+                                                                                        className="project-name-icon"/>} {cell.value}
+                                                                            </div>
+                                                                        ) :
+                                                                        (
+                                                                            cell.value
+                                                                        )}
+                                                                    </TableCell>
+                                                                ))}
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </TableContainer>
+                                    )}
+                                />
+                            </>
+                        )}
                     </>
                 )}
                 {viewMode === 'PROJECT' && currentProject &&
@@ -887,7 +982,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                             <Heading>
                                 {currentProject.name}
                             </Heading>
-                            {currentProject.ownerId === user.uid && (
+                            {currentProject.ownerId === user.uid ? (
                                 <div>
                                     <OverflowMenu flipped>
                                         <OverflowMenuItem
@@ -905,6 +1000,22 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                 openConfirmModal(
                                                     `Are you sure you want to delete project '${currentProject.name}'?`,
                                                     () => onDeleteProject(currentProject.id)
+                                                );
+                                            }}
+                                        />
+                                    </OverflowMenu>
+                                </div>
+                            ) : (
+                                <div>
+                                    <OverflowMenu flipped>
+                                        <OverflowMenuItem
+                                            itemText="Leave Project"
+                                            isDelete
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent triggering row onClick
+                                                openConfirmModal(
+                                                    `Are you sure you want to leave project '${currentProject.name}'?`,
+                                                    () => handleLeaveProject(currentProject.id)
                                                 );
                                             }}
                                         />
