@@ -27,7 +27,7 @@ import {
     TableSelectRow,
     Checkbox
 } from "@carbon/react";
-import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent, TrashCan, Move, Copy, Download} from '@carbon/react/icons';
+import {DecisionTree, TableSplit, Upload, UserFollow, Add, Close, Group, Folder, Folders, FolderParent, TrashCan, Move, Copy, Download, Share} from '@carbon/react/icons';
 import {
     extractBpmnProcessName,
     extractDmnTableName,
@@ -42,8 +42,7 @@ import AddFolderModal from './AddFolderModal.tsx';
 import RenameFolderModal from './RenameFolderModal.tsx';
 import MoveModelModal from "./MoveModelModal.tsx";
 
-const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenModel, onNavigateHome, onOpenProject}) => {
-    const [projects, setProjects] = useState([]);
+const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenModel, onNavigateHome, onOpenProject, projects, fetchUserProjects, onOpenShareModal}) => {
     const [invitations, setInvitations] = useState([]);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isAddModelModalOpen, setIsAddModelModalOpen] = useState(false);
@@ -84,13 +83,9 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
     // Fetch projects when component mounts or userId changes
     useEffect(() => {
-        fetchUserProjects(user.uid);
+        fetchUserProjects();
         fetchInvites();
-    }, [user.uid]);
-
-    useEffect(() => {
-        onOpenProject(projects.filter((project) => project.id === currentProject.id)[0]);
-    }, [projects])
+    }, [user.uid, fetchUserProjects]);
 
     // Save side panel state to localStorage
     useEffect(() => {
@@ -123,7 +118,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 }
             }).then(() => {
                 toastr.success('New project added successfully');
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
             }).catch((error) => {
                 toastr.error('Error adding new project: ', error);
             });
@@ -136,7 +131,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
         update(projectRef, {name: newProjectName, updatedAt: new Date().toISOString()})
             .then(() => {
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
                 toastr.success("Project name updated successfully");
             })
             .catch((error) => toastr.error("Error updating project name: ", error));
@@ -178,7 +173,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
             update(ref(db), updates).then(() => {
                 toastr.success('New BPMN model added successfully');
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
             }).catch((error) => {
                 toastr.error('Error adding new BPMN model: ', error);
             });
@@ -228,7 +223,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
             update(ref(db), updates).then(() => {
                 toastr.success('New DMN model added successfully');
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
             }).catch((error) => {
                 toastr.error('Error adding new DMN model: ', error);
             });
@@ -250,7 +245,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 type: 'folder'
             }).then(() => {
                 updateLastChangedDate(projectId);
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
                 toastr.success('New folder added successfully');
             })
         }
@@ -314,7 +309,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         update(ref(db), updates)
             .then(() => {
                 updateLastChangedDate(currentProject.id);
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
                 toastr.success("Model name updated successfully");
             })
             .catch((error) => toastr.error("Error updating model name: ", error));
@@ -327,7 +322,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         update(projectFoldersRef, {name: newFolderName})
             .then(() => {
                 updateLastChangedDate(projectId);
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
                 toastr.success("Folder name updated successfully");
             })
             .catch((error) => toastr.error("Error updating model name: ", error));
@@ -346,7 +341,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         update(ref(db), updates)
             .then(() => {
                 updateLastChangedDate(currentProject.id);
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
                 toastr.success(modelsToUpdate.length > 1 ? "Models moved successfully" : "Model moved successfully");
                 setBulkMoveModels([]);
             })
@@ -385,7 +380,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
             update(ref(db), updates).then(() => {
                 toastr.success('Model duplicated successfully');
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
             }).catch((error) => {
                 toastr.error('Error duplicating model: ', error);
             });
@@ -434,7 +429,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             update(ref(db), updates).then(() => {
                 toastr.success('New BPMN model added successfully');
                 fileInputRef.current.value = '';
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
             }).catch((error) => {
                 toastr.error('Error adding new BPMN model: ', error);
             });
@@ -463,7 +458,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             update(ref(db), updates).then(() => {
                 toastr.success('New DMN model added successfully');
                 fileInputRef.current.value = '';
-                fetchUserProjects(user.uid);
+                fetchUserProjects();
             }).catch((error) => {
                 toastr.error('Error adding new DMN model: ', error);
             });
@@ -472,65 +467,6 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
     const handleUploadButtonClick = () => {
         fileInputRef.current.click();
-    };
-
-    const fetchUserProjects = async (userId) => {
-        const db = getDatabase();
-        const userProjectsRef = ref(db, `users/${userId}/projects`);
-
-        const userProjectsSnapshot = await get(userProjectsRef);
-        if (userProjectsSnapshot.exists()) {
-            const userProjectsIds = Object.keys(userProjectsSnapshot.val());
-            const bpmnModelsSnapshot = await get(ref(db, 'bpmnModels'));
-            const usersSnapshot = await get(ref(db, 'users'));
-
-            const bpmnModelsData = bpmnModelsSnapshot.exists() ? bpmnModelsSnapshot.val() : {};
-            const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
-
-            const projectsPromises = userProjectsIds.map((projectId) => get(ref(db, `projects/${projectId}`)));
-            const projectsSnapshots = await Promise.all(projectsPromises);
-            const userProjects = projectsSnapshots
-                .filter((snapshot) => snapshot.exists())
-                .map((snapshot) => {
-                    const projectId = snapshot.key;
-                    const projectData = snapshot.val();
-                    const projectModels = Object.keys(bpmnModelsData)
-                        .filter(modelId => bpmnModelsData[modelId].projectId === projectId)
-                        .map(modelId => ({
-                            id: modelId,
-                            ...bpmnModelsData[modelId]
-                        }));
-
-                    const projectFolders = Object.keys(projectData?.folders ?? {}).map(folderId => ({
-                        id: folderId, 
-                        name: projectData.folders[folderId].name,
-                        type: 'folder',
-                        owner: '',
-                        date: undefined,
-                        actions: undefined
-                    }));
-
-                    const projectMembers = Object.keys(projectData.members).map(memberId => ({
-                        id: memberId,
-                        role: projectData.members[memberId],
-                        displayName: usersData[memberId]?.displayName || '',
-                        email: usersData[memberId]?.email || '',
-                        imageUrl: usersData[memberId]?.imageUrl || 'user.png'
-                    }));
-
-                    return {
-                        id: projectId,
-                        ...projectData,
-                        models: projectModels,
-                        folders: projectFolders,
-                        members: projectMembers
-                    };
-                });
-
-            setProjects(userProjects);
-        } else {
-            setProjects([]);
-        }
     };
 
     const fetchInvites = async () => {
@@ -604,7 +540,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         update(ref(db), updates).then(() => {
             updateLastChangedDate(currentProject.id);
             toastr.success('Model deleted successfully');
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
             setIsConfirmModalOpen(false);
         }).catch((error) => {
             toastr.error('Error deleting model: ', error);
@@ -623,7 +559,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         update(ref(db), updates).then(() => {
             updateLastChangedDate(currentProject.id);
             toastr.success(`${models.length} models deleted successfully`);
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
             setIsConfirmModalOpen(false);
         }).catch((error) => {
             toastr.error('Error deleting models: ', error);
@@ -667,7 +603,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
         update(ref(db), updates).then(() => {
             toastr.success(`${models.length} models duplicated successfully`);
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
         }).catch((error) => {
             toastr.error('Error duplicating models: ', error);
         });
@@ -693,7 +629,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         remove(modelRef).then(() => {
             deleteModelsAndInvites(currentProject.id);
             toastr.success('Project deleted successfully');
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
             setIsConfirmModalOpen(false);
             onNavigateHome();
         }).catch((error) => {
@@ -708,7 +644,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         remove(projectFolderRef).then(() => {
             updateLastChangedDate(currentProject.id);
             toastr.success('Folder deleted successfully');
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
             setIsConfirmModalOpen(false);
         }).catch((error) => {
             toastr.error('Error deleting folder: ', error);
@@ -731,7 +667,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             toastr.success('Invitation accepted and user added to project');
             setIsInviteModalOpen(false);
             fetchInvites();
-            fetchUserProjects(userId);
+            fetchUserProjects();
         }).catch((error) => {
             toastr.error('Error accepting invitation:', error);
         });
@@ -763,7 +699,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         remove(userProjectRef);
         remove(memberRef).then(() => {
             updateLastChangedDate(projectId);
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
             setIsConfirmModalOpen(false);
             toastr.success(`Member removed from project successfully`);
         }).catch((error) => {
@@ -779,7 +715,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         remove(userProjectRef);
         remove(memberRef).then(() => {
             updateLastChangedDate(projectId);
-            fetchUserProjects(user.uid);
+            fetchUserProjects();
             setIsConfirmModalOpen(false);
             toastr.success(`Successfully left the project`);
             onNavigateHome();
@@ -798,21 +734,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             onOpenModel(project, model);
             return;
         }
-
-        const db = getDatabase();
-        const xmlDataRef = ref(db, `modelXmlData/${model.id}`);
-        const xmlDataSnapshot = await get(xmlDataRef);
-
-        if (xmlDataSnapshot.exists()) {
-            const modelWithXml = {
-                ...model,
-                xmlData: xmlDataSnapshot.val().xmlData
-            };
-            onOpenModel(project, modelWithXml);
-        } else {
-            toastr.error('Could not load model data. It might be missing or corrupted.');
-            console.error(`XML data for model ${model.id} not found in modelXmlData.`);
-        }
+        onOpenModel(project, model);
     };
 
     const migrateDatabaseStructure = async () => {
@@ -1213,6 +1135,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                     <div className="cds--toolbar-title">
                                                         Models
                                                     </div>
+                                                    <Button onClick={onOpenShareModal}><Share
+                                                        className="project-name-icon"/> Share</Button>
                                                     <input style={{display: 'none'}} type="file" accept=".bpmn, .dmn" multiple
                                                            ref={fileInputRef}
                                                            onChange={(event) => handleFileChange(event, currentProject.id)}/>

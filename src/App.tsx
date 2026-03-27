@@ -11,15 +11,19 @@ import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile} from '@carbon/react';
-import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose} from '@carbon/react/icons';
+import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose, Share} from '@carbon/react/icons';
 import { child, get, getDatabase, ref, set, query, orderByChild, equalTo } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
 import {downloadXmlAsBpmn} from './services/utils.service.tsx';
+import { useNavigate, useLocation } from 'react-router-dom';
+import ShareModal from "./components/ShareModal.tsx";
 
 
 function App() {
     const [user, setUser] = useState(null);
+    const [projects, setProjects] = useState([]);
+    const [isProjectsLoaded, setIsProjectsLoaded] = useState(false);
     const [model, setModel] = useState({});
     const [autoSave, setAutoSave] = useState(() => {
         const saved = localStorage.getItem('autoSave');
@@ -27,7 +31,7 @@ function App() {
     });
     const [project, setProject] = useState({});
     const [folder, setfolder] = useState({});
-    const [viewMode, setViewMode] = useState('ALL_PROJECTS');
+    const [viewMode, setViewMode] = useState('INITIALIZING');
     const [changes, setChanges] = useState(false);
     const [viewPosition, setViewPosition] = useState(null);
     const [isProjectViewerOpen, setIsProjectViewerOpen] = useState(() => {
@@ -39,15 +43,24 @@ function App() {
         return saved ? parseInt(saved, 10) : 250;
     });
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+    const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [shareUrl, setShareUrl] = useState('');
     const [userAvatar, setUserAvatar] = useState('user.png');
     const bpmnModelerRef = useRef(null);
     const dmnModelerRef = useRef(null);
     const [isLoadingXml, setIsLoadingXml] = useState(false);
+    const loadingTimeoutRef = useRef(null);
+
+    const navigate = useNavigate();
+    const location = useLocation();
 
     const autoSaveRef = useRef(autoSave);
     const modelRef = useRef(model);
     const projectRef = useRef(project);
+    const folderRef = useRef(folder);
+    const fetchingModelIdRef = useRef(null);
     const isResizingRef = useRef(false);
 
     useEffect(() => {
@@ -62,6 +75,10 @@ function App() {
     useEffect(() => {
         projectRef.current = project;
     }, [project]);
+
+    useEffect(() => {
+        folderRef.current = folder;
+    }, [folder]);
 
     useEffect(() => {
         localStorage.setItem('isProjectViewerOpen', JSON.stringify(isProjectViewerOpen));
@@ -136,7 +153,6 @@ function App() {
                 // User is signed in, see docs for a list of available properties
                 // https://firebase.google.com/docs/reference/js/firebase.User
                 setUser(user);
-                setViewMode('ALL_PROJECTS');
 
                 // Fetch user avatar from the database
                 const db = getDatabase();
@@ -146,9 +162,13 @@ function App() {
                     const userData = snapshot.val();
                     setUserAvatar(userData.imageUrl || 'user.png');
                 }
+                
+                fetchUserProjects(user.uid);
             } else {
                 // User is signed out
                 setUser(null);
+                setProjects([]);
+                setIsProjectsLoaded(false);
             }
         });
 
@@ -156,83 +176,203 @@ function App() {
         return () => unsubscribe();
     }, []);
 
-    const fetchProjectData = useCallback(async (projectId) => {
-        if (!projectId) return;
+    const fetchUserProjects = useCallback(async (userId) => {
+        if (!userId) return;
         const db = getDatabase();
 
-        try {
-            const projectRef = ref(db, `projects/${projectId}`);
-            const projectSnapshot = await get(projectRef);
+        const userProjectsRef = ref(db, `users/${userId}/projects`);
+        const userProjectsSnapshot = await get(userProjectsRef);
+        
+        if (userProjectsSnapshot.exists()) {
+            const userProjectsIds = Object.keys(userProjectsSnapshot.val());
+            const bpmnModelsSnapshot = await get(ref(db, 'bpmnModels'));
+            const usersSnapshot = await get(ref(db, 'users'));
 
-            if (projectSnapshot.exists()) {
-                const projectData = projectSnapshot.val();
+            const bpmnModelsData = bpmnModelsSnapshot.exists() ? bpmnModelsSnapshot.val() : {};
+            const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
 
-                const modelsRef = ref(db, 'bpmnModels');
-                const modelsQuery = query(modelsRef, orderByChild('projectId'), equalTo(projectId));
-                const modelsSnapshot = await get(modelsQuery);
+            const projectsPromises = userProjectsIds.map((projectId) => get(ref(db, `projects/${projectId}`)));
+            const projectsSnapshots = await Promise.all(projectsPromises);
+            const userProjects = projectsSnapshots
+                .filter((snapshot) => snapshot.exists())
+                .map((snapshot) => {
+                    const projectId = snapshot.key;
+                    const projectData = snapshot.val();
+                    const projectModels = Object.keys(bpmnModelsData)
+                        .filter(modelId => bpmnModelsData[modelId].projectId === projectId)
+                        .map(modelId => ({
+                            id: modelId,
+                            ...bpmnModelsData[modelId]
+                        }));
 
-                const models = [];
-                if (modelsSnapshot.exists()) {
-                    modelsSnapshot.forEach((childSnapshot) => {
-                        models.push({
-                            id: childSnapshot.key,
-                            ...childSnapshot.val()
-                        });
-                    });
-                }
+                    const projectFolders = Object.keys(projectData?.folders ?? {}).map(folderId => ({
+                        id: folderId, 
+                        name: projectData.folders[folderId].name,
+                        type: 'folder',
+                        owner: '',
+                        date: undefined,
+                        actions: undefined
+                    }));
 
-                const folders = Object.keys(projectData.folders || {}).map(key => ({
-                    id: key,
-                    ...projectData.folders[key],
-                    type: 'folder'
-                }));
+                    const projectMembers = Object.keys(projectData.members).map(memberId => ({
+                        id: memberId,
+                        role: projectData.members[memberId],
+                        displayName: usersData[memberId]?.displayName || '',
+                        email: usersData[memberId]?.email || '',
+                        imageUrl: usersData[memberId]?.imageUrl || 'user.png'
+                    }));
 
-                const { members, ...restProjectData } = projectData;
+                    return {
+                        id: projectId,
+                        ...projectData,
+                        models: projectModels,
+                        folders: projectFolders,
+                        members: projectMembers
+                    };
+                });
 
-                setProject(prev => ({
-                    ...prev,
-                    ...restProjectData,
-                    models: models,
-                    folders: folders
-                }));
-            }
-        } catch (error) {
-            console.error("Error refreshing project data:", error);
+            setProjects(userProjects);
+        } else {
+            setProjects([]);
         }
+        setIsProjectsLoaded(true);
     }, []);
 
+    // Sync URL with Application State
+    useEffect(() => {
+        if (!user || !isProjectsLoaded) return;
+
+        const path = location.pathname;
+        if (path === '/' || path === '') {
+            if (viewMode !== 'ALL_PROJECTS') {
+                setProject({}); setfolder({}); setModel({}); setViewMode('ALL_PROJECTS');
+            }
+            return;
+        }
+
+        const projectMatch = path.match(/^\/project\/([^\/]+)/);
+        if (projectMatch) {
+            const decodedProjectName = decodeURIComponent(projectMatch[1]);
+            const p = projects.find(p => p.name === decodedProjectName);
+            
+            if (!p) {
+                if (viewMode !== '404') setViewMode('404');
+                return;
+            }
+
+            if (projectRef.current?.id !== p.id) setProject(p);
+
+            const folderMatch = path.match(/^\/project\/[^\/]+\/folder\/([^\/]+)/);
+            const modelMatch = path.match(/^\/project\/[^\/]+\/model\/([^\/]+)/);
+
+            if (folderMatch) {
+                const decodedFolderName = decodeURIComponent(folderMatch[1]);
+                const f = p.folders?.find(f => f.name === decodedFolderName);
+                if (f) {
+                    if (folderRef.current?.id !== f.id) setfolder(f);
+                    if (modelRef.current?.id) setModel({});
+                    if (viewMode !== 'BPMN' && viewMode !== 'DMN') {
+                        if (viewMode !== 'PROJECT') setViewMode('PROJECT');
+                    }
+                } else {
+                    if (viewMode !== '404') setViewMode('404');
+                }
+            } else if (modelMatch) {
+                const modelId = modelMatch[1];
+                const m = p.models?.find(m => m.id === modelId);
+                
+                if (m) {
+                    if (m.folder) {
+                        const f = p.folders?.find(folder => folder.id === m.folder);
+                        if (f && folderRef.current?.id !== f.id) setfolder(f);
+                    } else if (folderRef.current?.id) {
+                        setfolder({});
+                    }
+
+                    if (modelRef.current?.id !== modelId && fetchingModelIdRef.current !== modelId) {
+                        fetchingModelIdRef.current = modelId;
+                        setViewMode(m.type === 'bpmn' ? 'BPMN' : 'DMN');
+
+                        // Only show loading indicator if loading takes more than 200ms
+                        loadingTimeoutRef.current = setTimeout(() => setIsLoadingXml(true), 200);
+                        
+                        const db = getDatabase();
+                        get(ref(db, `modelXmlData/${modelId}`)).then(xmlDataSnapshot => {
+                            if (xmlDataSnapshot.exists()) {
+                                const modelWithXml = {
+                                    ...m,
+                                    xmlData: xmlDataSnapshot.val().xmlData
+                                };
+                                setModel(modelWithXml);
+                                setViewPosition(null);
+                            } else {
+                                toastr.error('Could not load model data.');
+                                setViewMode('404');
+                            }
+                        }).catch(err => {
+                            console.error(err);
+                            setViewMode('404');
+                        }).finally(() => {
+                            clearTimeout(loadingTimeoutRef.current);
+                            setIsLoadingXml(false);
+                            fetchingModelIdRef.current = null;
+                        });
+                    } else if (modelRef.current?.id === modelId) {
+                        if (viewMode !== (m.type === 'bpmn' ? 'BPMN' : 'DMN')) setViewMode(m.type === 'bpmn' ? 'BPMN' : 'DMN');
+                    }
+                } else {
+                    if (viewMode !== '404') setViewMode('404');
+                }
+            } else {
+                if (folderRef.current?.id) setfolder({});
+                if (modelRef.current?.id) setModel({});
+                if (viewMode !== 'BPMN' && viewMode !== 'DMN') {
+                    if (viewMode !== 'PROJECT') setViewMode('PROJECT');
+                }
+            }
+        } else {
+            if (viewMode !== '404') setViewMode('404');
+        }
+    }, [location.pathname, isProjectsLoaded, projects, user]);
+
+    const handleNavigation = (path: string) => {
+        if (changes) {
+            setPendingNavigation(path);
+            setIsSaveModalOpen(true);
+        } else {
+            navigate(path);
+        }
+    };
+
+    const handleOpenShareModal = () => {
+        setShareUrl(window.location.href);
+        setIsShareModalOpen(true);
+    };
+
     const onSaveModelClick = (model) => {
-        saveBPMNModel(model).then(() => fetchProjectData(project.id));
+        saveBPMNModel(model).then(() => fetchUserProjects(user.uid));
         setChanges(false);
     };
 
     const onSaveDMNClick = (model) => {
-        saveDMNodel(model).then(() => fetchProjectData(project.id));
+        saveDMNodel(model).then(() => fetchUserProjects(user.uid));
         setChanges(false);
     };
 
     const handleOpenProject = (project) => {
         if (project){
-            setProject(project);
-            // setfolder({});
-            setViewMode('PROJECT');
+            handleNavigation('/project/' + encodeURIComponent(project.name));
         }
     };
 
     const handleOpenModel = (project, model) => {
         //TODO: remove if statement if DMN is supported
-        if (model?.type === 'bpmn') {
-            setProject(project);
-            setModel(model);
-            setViewMode(model.type === 'bpmn' ? 'BPMN' : 'DMN');
-        }
-
-        if (model?.type === 'folder') {
-            setfolder(model);
-        }
-
-        if (model?.type === 'folderUp') {
-            setfolder({});
+        if (model?.type === 'bpmn' || model?.type === 'dmn') {
+            handleNavigation('/project/' + encodeURIComponent(project.name) + '/model/' + model.id);
+        } else if (model?.type === 'folder') {
+            handleNavigation('/project/' + encodeURIComponent(project.name) + '/folder/' + encodeURIComponent(model.name));
+        } else if (model?.type === 'folderUp') {
+            handleNavigation('/project/' + encodeURIComponent(project.name));
         }
     };
 
@@ -246,69 +386,46 @@ function App() {
         if (autoSaveRef.current) {
             saveBPMNModel(updatedModel).then(() => {
                 if (projectRef.current?.id) {
-                    fetchProjectData(projectRef.current.id);
+                    fetchUserProjects(user.uid);
                 }
             });
             setChanges(false);
         }
-    }, [fetchProjectData]);
+    }, [fetchUserProjects]);
 
     const handleViewPositionChange = (viewbox) => {
         setViewPosition(viewbox);
     }
 
     const onMyProjectsNavClick = () => {
-        if (!changes) {
-            setProject({});
-            setfolder({});
-            setModel({});
-            setViewMode('ALL_PROJECTS');
-            setViewPosition(null);
-            setChanges(false);
-        } else {
-         setIsSaveModalOpen(true);
-        }
+        handleNavigation('/');
     }
 
     const onCurrentProjectNavClick = () => {
-        if (!changes) {
-            setModel({});
-            setfolder({});
-            setViewMode('PROJECT');
-            setViewPosition(null);
-            setChanges(false);
-        } else {
-         setIsSaveModalOpen(true);
-         setfolder({});
-        }
+        handleNavigation('/project/' + encodeURIComponent(project.name));
     }
 
     const onCurrentFolderNavClick = () => {
-        if (!changes) {
-            setModel({});
-            setViewMode('PROJECT');
-            setViewPosition(null);
-            setChanges(false);
-        } else {
-         setIsSaveModalOpen(true);
-        }
+        handleNavigation('/project/' + encodeURIComponent(project.name) + '/folder/' + encodeURIComponent(folder.name));
     }
 
     const handleOnSave = (model) => {
         saveBPMNModel(model);
-        setModel({});
-        setViewMode('PROJECT');
-        setViewPosition(null);
         setChanges(false);
         setIsSaveModalOpen(false);
+        if (pendingNavigation) {
+            navigate(pendingNavigation);
+            setPendingNavigation(null);
+        }
     }
 
     const handleOnDiscard = () => {
-        setModel({});
-        setViewMode('PROJECT');
-        setViewPosition(null);
         setChanges(false);
         setIsSaveModalOpen(false);
+        if (pendingNavigation) {
+            navigate(pendingNavigation);
+            setPendingNavigation(null);
+        }
     }
 
     const onLogoutClick = () => {
@@ -326,6 +443,7 @@ function App() {
         setViewMode('ALL_PROJECTS');
         logout();
         setIsLogoutModalOpen(false);
+        navigate('/');
     }
 
     const handleOnDiscardLogout = () => {
@@ -334,6 +452,7 @@ function App() {
         setViewMode('ALL_PROJECTS');
         logout();
         setIsLogoutModalOpen(false);
+        navigate('/');
     }
 
     const handleCloseLogout = () => {
@@ -341,8 +460,7 @@ function App() {
     }
 
     const handleNavigateHome = () => {
-        setProject({});
-        setViewMode('ALL_PROJECTS');
+        handleNavigation('/');
     }
 
     const onDownloadAsPng = async () => {
@@ -408,34 +526,17 @@ function App() {
             return;
         }
 
+        let path = '';
         if (item.type === 'folder' || item.type === 'folderUp') {
-            setfolder(item.type === 'folderUp' ? {} : item);
-        } else {
-            setIsLoadingXml(true);
-            try {
-                const db = getDatabase();
-                const xmlDataRef = ref(db, `modelXmlData/${item.id}`);
-                const xmlDataSnapshot = await get(xmlDataRef);
-
-                if (xmlDataSnapshot.exists()) {
-                    const modelWithXml = {
-                        ...item,
-                        xmlData: xmlDataSnapshot.val().xmlData
-                    };
-                    setModel(modelWithXml);
-                    setViewPosition(null);
-                    setViewMode(item.type === 'bpmn' ? 'BPMN' : 'DMN');
-                } else {
-                    toastr.error('Could not load model data. It might be missing or corrupted.');
-                    console.error(`XML data for model ${item.id} not found in modelXmlData.`);
-                }
-            } catch (error) {
-                toastr.error('Error fetching model XML data: ' + error.message);
-                console.error('Error fetching model XML data:', error);
-            } finally {
-                setIsLoadingXml(false);
+            if (item.type === 'folderUp') {
+                path = '/project/' + encodeURIComponent(project.name);
+            } else {
+                path = '/project/' + encodeURIComponent(project.name) + '/folder/' + encodeURIComponent(item.name);
             }
+        } else {
+            path = '/project/' + encodeURIComponent(project.name) + '/model/' + item.id;
         }
+        handleNavigation(path);
     };
 
     return (
@@ -452,6 +553,11 @@ function App() {
               onClose={handleCloseLogout}
               changes={changes}
           />}
+          <ShareModal
+              isOpen={isShareModalOpen}
+              onClose={() => setIsShareModalOpen(false)}
+              url={shareUrl}
+          />
           <Tile className="header">
               <div className="header-logo">
                   <img src="/bpmn_modeler_logo.png" alt="valtimo academy logo"/>
@@ -597,6 +703,14 @@ function App() {
                                       iconDescription="Download as image"
                                       tooltipPosition="right"
                                   />}
+                                  <Button
+                                      onClick={handleOpenShareModal}
+                                      className="share-button"
+                                      hasIconOnly
+                                      renderIcon={Share}
+                                      iconDescription="Share"
+                                      tooltipPosition="right"
+                                  />
                           </div>
                           <div className="modeler-toolbar-right">
                               {viewMode === 'BPMN' &&
@@ -640,7 +754,19 @@ function App() {
               </div>
           ) : (
               <>
-                  {(viewMode !== 'BPMN' && viewMode !== 'DMN') && user && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel}/>}
+                  {viewMode === '404' && user && (
+                      <div className="welcome-wrapper">
+                          <div className="welcome-title">404 - Not Found</div>
+                          <div className="welcome-subtitle">The project, folder, or model you are looking for does not exist or you do not have permission to view it.</div>
+                          <br/><Button onClick={() => handleNavigation('/')}>Back to Projects</Button>
+                      </div>
+                  )}
+                  {(viewMode === 'ALL_PROJECTS' || viewMode === 'PROJECT') && user && isProjectsLoaded && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel} projects={projects} fetchUserProjects={() => fetchUserProjects(user.uid)} onOpenShareModal={handleOpenShareModal} />}
+                  {(viewMode === 'INITIALIZING' || (user && !isProjectsLoaded)) && (
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px)', width: '100%', color: '#8d8d8d' }}>
+                          <h2>Loading...</h2>
+                      </div>
+                  )}
                   {!user && <div className="welcome-wrapper">
                       <img src="/bpmn_modeler_logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
                       <div className="welcome-title">
