@@ -7,6 +7,7 @@ export async function deleteModelsAndInvites(projectId) {
     const modelsSnapshot = await get(modelsQuery);
     modelsSnapshot.forEach((childSnapshot) => {
         remove(ref(db, `bpmnModels/${childSnapshot.key}`));
+        remove(ref(db, `modelXmlData/${childSnapshot.key}`));
     });
 
     const invitesQuery = query(ref(db, 'invitations'), orderByChild('projectId'), equalTo(projectId));

@@ -43,6 +43,7 @@ function App() {
     const [userAvatar, setUserAvatar] = useState('user.png');
     const bpmnModelerRef = useRef(null);
     const dmnModelerRef = useRef(null);
+    const [isLoadingXml, setIsLoadingXml] = useState(false);
 
     const autoSaveRef = useRef(autoSave);
     const modelRef = useRef(model);
@@ -397,7 +398,7 @@ function App() {
         });
     };
 
-    const handleSidePanelItemClick = (item) => {
+    const handleSidePanelItemClick = async (item) => {
         if (item.id === model.id) return;
 
         if (item.type === 'dmn') return;
@@ -410,9 +411,30 @@ function App() {
         if (item.type === 'folder' || item.type === 'folderUp') {
             setfolder(item.type === 'folderUp' ? {} : item);
         } else {
-            setModel(item);
-            setViewPosition(null);
-            setViewMode(item.type === 'bpmn' ? 'BPMN' : 'DMN');
+            setIsLoadingXml(true);
+            try {
+                const db = getDatabase();
+                const xmlDataRef = ref(db, `modelXmlData/${item.id}`);
+                const xmlDataSnapshot = await get(xmlDataRef);
+
+                if (xmlDataSnapshot.exists()) {
+                    const modelWithXml = {
+                        ...item,
+                        xmlData: xmlDataSnapshot.val().xmlData
+                    };
+                    setModel(modelWithXml);
+                    setViewPosition(null);
+                    setViewMode(item.type === 'bpmn' ? 'BPMN' : 'DMN');
+                } else {
+                    toastr.error('Could not load model data. It might be missing or corrupted.');
+                    console.error(`XML data for model ${item.id} not found in modelXmlData.`);
+                }
+            } catch (error) {
+                toastr.error('Error fetching model XML data: ' + error.message);
+                console.error('Error fetching model XML data:', error);
+            } finally {
+                setIsLoadingXml(false);
+            }
         }
     };
 
@@ -607,8 +629,13 @@ function App() {
                                   </Button>}
                           </div>
                       </div>
-                      {viewMode === 'BPMN' && <BPMNModelerComponent key={model.id} ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
-                      {viewMode === 'DMN' && <DMNModelerComponent key={model.id} ref={dmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
+                      {isLoadingXml && (
+                          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100% - 48px)', color: '#8d8d8d' }}>
+                              <h2>Loading Model...</h2>
+                          </div>
+                      )}
+                      {viewMode === 'BPMN' && !isLoadingXml && <BPMNModelerComponent key={model.id} ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
+                      {viewMode === 'DMN' && !isLoadingXml && <DMNModelerComponent key={model.id} ref={dmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
                   </div>
               </div>
           ) : (

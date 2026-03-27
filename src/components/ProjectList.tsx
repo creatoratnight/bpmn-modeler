@@ -145,20 +145,10 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     const handleAddBPMNModel = (projectId, newModelName) => {
         if (newModelName) {
             const db = getDatabase();
-            const bpmnModelsRef = ref(db, 'bpmnModels');
-
-            // Generate a new model ID
-            const newModelRef = push(bpmnModelsRef);
+            const newModelRef = push(ref(db, 'bpmnModels'));
             const modelId = newModelRef.key;
 
-            // Set the BPMN model data
-            set(newModelRef, {
-                projectId: projectId,
-                ownerId: user.uid,
-                name: newModelName,
-                folder: selectedFolder?.id || null,
-                type: 'bpmn',
-                xmlData: `<?xml version="1.0" encoding="UTF-8"?>
+            const xmlData = `<?xml version="1.0" encoding="UTF-8"?>
                             <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1y9ob7p" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.19.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.20.0">
                               <bpmn:process id="${camelize(newModelName)}" name="${newModelName}" isExecutable="true" camunda:historyTimeToLive="180">
                                 <bpmn:startEvent id="StartEvent_1" />
@@ -170,41 +160,38 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                   </bpmndi:BPMNShape>
                                 </bpmndi:BPMNPlane>
                               </bpmndi:BPMNDiagram>
-                            </bpmn:definitions>`,
+                            </bpmn:definitions>`;
+
+            const updates = {};
+            updates[`/bpmnModels/${modelId}`] = {
+                projectId: projectId,
+                ownerId: user.uid,
+                name: newModelName,
+                folder: selectedFolder?.id || null,
+                type: 'bpmn',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-            }).then(() => {
-                const updates = {};
-                updates['/projects/' + projectId + '/models/' + modelId] = true;
-                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
+            };
+            updates[`/modelXmlData/${modelId}`] = { xmlData: xmlData };
+            updates[`/projects/${projectId}/models/${modelId}`] = true;
+            updates[`/projects/${projectId}/updatedAt`] = new Date().toISOString();
 
-                update(ref(db), updates).then(() => {
-                    toastr.success('New BPMN model added successfully');
-                    fetchUserProjects(user.uid);
-                }).catch((error) => {
-                    toastr.error('Error adding new BPMN model: ', error);
-                });
-            })
+            update(ref(db), updates).then(() => {
+                toastr.success('New BPMN model added successfully');
+                fetchUserProjects(user.uid);
+            }).catch((error) => {
+                toastr.error('Error adding new BPMN model: ', error);
+            });
         }
     };
 
     const handleAddDMNModel = (projectId, newModelName) => {
         if (newModelName) {
             const db = getDatabase();
-            const bpmnModelsRef = ref(db, 'bpmnModels');
-
-            // Generate a new model ID
-            const newModelRef = push(bpmnModelsRef);
+            const newModelRef = push(ref(db, 'bpmnModels'));
             const modelId = newModelRef.key;
 
-            // Set the BPMN model data
-            set(newModelRef, {
-                projectId: projectId,
-                ownerId: user.uid,
-                name: newModelName,
-                type: 'dmn',
-                folder: selectedFolder?.id || null,
-                xmlData: `<?xml version="1.0" encoding="UTF-8"?>
+            const xmlData = `<?xml version="1.0" encoding="UTF-8"?>
                             <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="${camelize(newModelName)}Drd" name="${newModelName} DRD" namespace="http://camunda.org/schema/1.0/dmn" exporter="Camunda Modeler" exporterVersion="5.19.0" modeler:executionPlatform="Camunda Platform" modeler:executionPlatformVersion="7.20.0">
                               <decision id="${camelize(newModelName)}" name="${newModelName}">
                                 <decisionTable id="DecisionTable_1tsa30h">
@@ -223,21 +210,28 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                   </dmndi:DMNShape>
                                 </dmndi:DMNDiagram>
                               </dmndi:DMNDI>
-                            </definitions>`,
+                            </definitions>`;
+
+            const updates = {};
+            updates[`/bpmnModels/${modelId}`] = {
+                projectId: projectId,
+                ownerId: user.uid,
+                name: newModelName,
+                type: 'dmn',
+                folder: selectedFolder?.id || null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-            }).then(() => {
-                const updates = {};
-                updates['/projects/' + projectId + '/models/' + modelId] = true;
-                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
+            };
+            updates[`/modelXmlData/${modelId}`] = { xmlData: xmlData };
+            updates[`/projects/${projectId}/models/${modelId}`] = true;
+            updates[`/projects/${projectId}/updatedAt`] = new Date().toISOString();
 
-                update(ref(db), updates).then(() => {
-                    toastr.success('New DMN model added successfully');
-                    fetchUserProjects(user.uid);
-                }).catch((error) => {
-                    toastr.error('Error adding new DMN model: ', error);
-                });
-            })
+            update(ref(db), updates).then(() => {
+                toastr.success('New DMN model added successfully');
+                fetchUserProjects(user.uid);
+            }).catch((error) => {
+                toastr.error('Error adding new DMN model: ', error);
+            });
         }
     };
 
@@ -272,22 +266,26 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         setIsRenameFolderModalOpen(true);
     }
 
-    const handleRenameModel = (newModelName) => {
+    const handleRenameModel = async (newModelName) => {
         const db = getDatabase();
-        const modelRef = ref(db, `bpmnModels/${selectedModel.id}`);
+        const modelId = selectedModel.id;
 
-        const updates = {
-            name: newModelName,
-            updatedAt: new Date().toISOString()
-        };
+        // 1. Fetch XML data
+        const xmlDataRef = ref(db, `modelXmlData/${modelId}`);
+        const xmlDataSnapshot = await get(xmlDataRef);
+        const currentXmlData = xmlDataSnapshot.exists() ? xmlDataSnapshot.val().xmlData : '';
 
-        if (selectedModel.xmlData && (selectedModel.type === 'bpmn' || selectedModel.type === 'dmn')) {
+        const updates = {};
+        // Update metadata
+        updates[`/bpmnModels/${modelId}/name`] = newModelName;
+        updates[`/bpmnModels/${modelId}/updatedAt`] = new Date().toISOString();
+
+        let newXmlData = currentXmlData;
+        if (currentXmlData && (selectedModel.type === 'bpmn' || selectedModel.type === 'dmn')) {
             const isBpmn = selectedModel.type === 'bpmn';
             const tagName = isBpmn ? 'bpmn:process' : 'decision';
             const refAttr = isBpmn ? 'bpmnElement' : 'dmnElementRef';
 
-            let newXmlData = selectedModel.xmlData;
-            console.log(newXmlData);
             const newId = camelize(newModelName);
 
             const idMatch = newXmlData.match(new RegExp(`<${tagName}[^>]+id="([^"]+)"`));
@@ -308,11 +306,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 const refRegex = new RegExp(`(${refAttr}=")(${escapedOldId})(")`);
                 newXmlData = newXmlData.replace(refRegex, `$1${newId}$3`);
 
-                updates['xmlData'] = newXmlData;
+                // Update XML data in its own node
+                updates[`/modelXmlData/${modelId}/xmlData`] = newXmlData;
             }
         }
 
-        update(modelRef, updates)
+        update(ref(db), updates)
             .then(() => {
                 updateLastChangedDate(currentProject.id);
                 fetchUserProjects(user.uid);
@@ -354,37 +353,42 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             .catch((error) => toastr.error("Error moving model: ", error));
     }
 
-    const handleDuplicateModel = (model) => {
+    const handleDuplicateModel = async (model) => {
         if (model) {
             const db = getDatabase();
-            const bpmnModelsRef = ref(db, 'bpmnModels');
+
+            // 1. Fetch XML data
+            const xmlDataRef = ref(db, `modelXmlData/${model.id}`);
+            const xmlDataSnapshot = await get(xmlDataRef);
+            const xmlData = xmlDataSnapshot.exists() ? xmlDataSnapshot.val().xmlData : '';
 
             // Generate a new model ID
-            const newModelRef = push(bpmnModelsRef);
-            const modelId = newModelRef.key;
+            const newModelRef = push(ref(db, 'bpmnModels'));
+            const newModelId = newModelRef.key;
 
-            // Set the BPMN model data
-            set(newModelRef, {
+            const updates = {};
+            // Metadata for new model
+            updates[`/bpmnModels/${newModelId}`] = {
                 projectId: model.projectId,
                 ownerId: user.uid,
                 name: `${model.name} Copy`,
                 type: model.type,
                 folder: model.folder || null,
-                xmlData: model.xmlData,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-            }).then(() => {
-                const updates = {};
-                updates['/projects/' + model.projectId + '/models/' + modelId] = true;
-                updates['/projects/' + model.projectId + '/updatedAt'] = new Date().toISOString();
+            };
+            // XML data for new model
+            updates[`/modelXmlData/${newModelId}`] = { xmlData: xmlData };
+            // Project link
+            updates[`/projects/${model.projectId}/models/${newModelId}`] = true;
+            updates[`/projects/${model.projectId}/updatedAt`] = new Date().toISOString();
 
-                update(ref(db), updates).then(() => {
-                    toastr.success('Model duplicated successfully');
-                    fetchUserProjects(user.uid);
-                }).catch((error) => {
-                    toastr.error('Error duplicating model: ', error);
-                });
-            })
+            update(ref(db), updates).then(() => {
+                toastr.success('Model duplicated successfully');
+                fetchUserProjects(user.uid);
+            }).catch((error) => {
+                toastr.error('Error duplicating model: ', error);
+            });
         }
     };
 
@@ -410,69 +414,59 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     const handleUploadBPMNModel = (projectId: string, xml: string, filename) => {
         if (xml) {
             const db = getDatabase();
-            const bpmnModelsRef = ref(db, 'bpmnModels');
-
-            // Generate a new model ID
-            const newModelRef = push(bpmnModelsRef);
+            const newModelRef = push(ref(db, 'bpmnModels'));
             const modelId = newModelRef.key;
 
-            // Set the BPMN model data
-            set(newModelRef, {
+            const updates = {};
+            updates[`/bpmnModels/${modelId}`] = {
                 projectId: projectId,
                 ownerId: user.uid,
                 name: extractBpmnProcessName(xml) || filename.replace('.bpmn',''),
                 type: 'bpmn',
                 folder: selectedFolder?.id || null,
-                xmlData: xml,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-            }).then(() => {
-                const updates = {};
-                updates['/projects/' + projectId + '/models/' + modelId] = true;
-                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
+            };
+            updates[`/modelXmlData/${modelId}`] = { xmlData: xml };
+            updates[`/projects/${projectId}/models/${modelId}`] = true;
+            updates[`/projects/${projectId}/updatedAt`] = new Date().toISOString();
 
-                update(ref(db), updates).then(() => {
-                    toastr.success('New BPMN model added successfully');
-                    fileInputRef.current.value = '';
-                    fetchUserProjects(user.uid);
-                }).catch((error) => {
-                    toastr.error('Error adding new BPMN model: ', error);
-                });
-            })
+            update(ref(db), updates).then(() => {
+                toastr.success('New BPMN model added successfully');
+                fileInputRef.current.value = '';
+                fetchUserProjects(user.uid);
+            }).catch((error) => {
+                toastr.error('Error adding new BPMN model: ', error);
+            });
         }
     };
 
     const handleUploadDMNModel = (projectId: string, xml: string, filename) => {
         if (xml) {
             const db = getDatabase();
-            const bpmnModelsRef = ref(db, 'bpmnModels');
-
-            // Generate a new model ID
-            const newModelRef = push(bpmnModelsRef);
+            const newModelRef = push(ref(db, 'bpmnModels'));
             const modelId = newModelRef.key;
             
-            // Set the DMN model data
-            set(newModelRef, {
+            const updates = {};
+            updates[`/bpmnModels/${modelId}`] = {
                 projectId: projectId,
                 ownerId: user.uid,
                 name: extractDmnTableName(xml) || filename.replace('.bpmn',''),
                 type: 'dmn',
-                xmlData: xml,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-            }).then(() => {
-                const updates = {};
-                updates['/projects/' + projectId + '/models/' + modelId] = true;
-                updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
+            };
+            updates[`/modelXmlData/${modelId}`] = { xmlData: xml };
+            updates[`/projects/${projectId}/models/${modelId}`] = true;
+            updates[`/projects/${projectId}/updatedAt`] = new Date().toISOString();
 
-                update(ref(db), updates).then(() => {
-                    toastr.success('New DMN model added successfully');
-                    fileInputRef.current.value = '';
-                    fetchUserProjects(user.uid);
-                }).catch((error) => {
-                    toastr.error('Error adding new DMN model: ', error);
-                });
-            })
+            update(ref(db), updates).then(() => {
+                toastr.success('New DMN model added successfully');
+                fileInputRef.current.value = '';
+                fetchUserProjects(user.uid);
+            }).catch((error) => {
+                toastr.error('Error adding new DMN model: ', error);
+            });
         }
     };
 
@@ -602,12 +596,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
     const onDeleteModel = (modelId) => {
         const db = getDatabase();
-        const modelRef = ref(db, `bpmnModels/${modelId}`);
-        const projectModelRef = ref(db, `projects/${currentProject.id}/models/${modelId}`);
+        const updates = {};
+        updates[`/bpmnModels/${modelId}`] = null;
+        updates[`/modelXmlData/${modelId}`] = null;
+        updates[`/projects/${currentProject.id}/models/${modelId}`] = null;
 
-        remove(projectModelRef);
-
-        remove(modelRef).then(() => {
+        update(ref(db), updates).then(() => {
             updateLastChangedDate(currentProject.id);
             toastr.success('Model deleted successfully');
             fetchUserProjects(user.uid);
@@ -622,6 +616,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const updates = {};
         models.forEach(model => {
             updates[`bpmnModels/${model.id}`] = null;
+            updates[`modelXmlData/${model.id}`] = null;
             updates[`projects/${currentProject.id}/models/${model.id}`] = null;
         });
 
@@ -635,31 +630,42 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     }
 
-    const onBulkDuplicateModels = (models) => {
+    const onBulkDuplicateModels = async (models) => {
         const db = getDatabase();
-        const promises = models.map(model => {
-            const bpmnModelsRef = ref(db, 'bpmnModels');
-            const newModelRef = push(bpmnModelsRef);
-            const modelId = newModelRef.key;
+        const updates = {};
+        const projectId = models[0]?.projectId; // Assume all from same project
 
-            return set(newModelRef, {
+        for (const model of models) {
+            // 1. Fetch XML data
+            const xmlDataRef = ref(db, `modelXmlData/${model.id}`);
+            const xmlDataSnapshot = await get(xmlDataRef);
+            const xmlData = xmlDataSnapshot.exists() ? xmlDataSnapshot.val().xmlData : '';
+
+            // 2. Prepare updates
+            const newModelRef = push(ref(db, 'bpmnModels'));
+            const newModelId = newModelRef.key;
+
+            // Metadata for new model
+            updates[`/bpmnModels/${newModelId}`] = {
                 projectId: model.projectId,
                 ownerId: user.uid,
                 name: `${model.name} Copy`,
                 type: model.type,
                 folder: model.folder || null,
-                xmlData: model.xmlData,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
-            }).then(() => {
-                const updates = {};
-                updates['/projects/' + model.projectId + '/models/' + modelId] = true;
-                updates['/projects/' + model.projectId + '/updatedAt'] = new Date().toISOString();
-                return update(ref(db), updates);
-            });
-        });
+            };
+            // XML data for new model
+            updates[`/modelXmlData/${newModelId}`] = { xmlData: xmlData };
+            // Project link
+            updates[`/projects/${model.projectId}/models/${newModelId}`] = true;
+        }
 
-        Promise.all(promises).then(() => {
+        if (projectId) {
+            updates[`/projects/${projectId}/updatedAt`] = new Date().toISOString();
+        }
+
+        update(ref(db), updates).then(() => {
             toastr.success(`${models.length} models duplicated successfully`);
             fetchUserProjects(user.uid);
         }).catch((error) => {
@@ -667,10 +673,17 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     }
 
-    const onBulkDownloadModels = (models) => {
-        models.forEach(model => {
-            downloadXmlAsBpmn(model);
-        });
+    const onBulkDownloadModels = async (models) => {
+        const db = getDatabase();
+        for (const model of models) {
+            const xmlDataRef = ref(db, `modelXmlData/${model.id}`);
+            const xmlDataSnapshot = await get(xmlDataRef);
+            if (xmlDataSnapshot.exists()) {
+                downloadXmlAsBpmn({ ...model, xmlData: xmlDataSnapshot.val().xmlData });
+            } else {
+                toastr.error(`Could not download ${model.name}. Data missing.`);
+            }
+        }
     }
 
     const onDeleteProject = () => {
@@ -775,8 +788,76 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     };
 
+    const handleOpenModelClick = async (project, model) => {
+        if (model.type === 'dmn') {
+            // DMN not supported yet, do nothing.
+            return;
+        }
+        if (model.type === 'folder' || model.type === 'folderUp') {
+            // This is handled by onOpenModel in the parent, which sets selectedFolder
+            onOpenModel(project, model);
+            return;
+        }
+
+        const db = getDatabase();
+        const xmlDataRef = ref(db, `modelXmlData/${model.id}`);
+        const xmlDataSnapshot = await get(xmlDataRef);
+
+        if (xmlDataSnapshot.exists()) {
+            const modelWithXml = {
+                ...model,
+                xmlData: xmlDataSnapshot.val().xmlData
+            };
+            onOpenModel(project, modelWithXml);
+        } else {
+            toastr.error('Could not load model data. It might be missing or corrupted.');
+            console.error(`XML data for model ${model.id} not found in modelXmlData.`);
+        }
+    };
+
+    const migrateDatabaseStructure = async () => {
+        const db = getDatabase();
+        const bpmnModelsRef = ref(db, 'bpmnModels');
+        
+        try {
+            const snapshot = await get(bpmnModelsRef);
+            if (!snapshot.exists()) {
+                toastr.info("No models found to migrate.");
+                return;
+            }
+
+            const models = snapshot.val();
+            const updates = {};
+            let migrationCount = 0;
+
+            Object.keys(models).forEach(modelId => {
+                const model = models[modelId];
+                if (model.xmlData) {
+                    updates[`modelXmlData/${modelId}/xmlData`] = model.xmlData;
+                    updates[`bpmnModels/${modelId}/xmlData`] = null;
+                    migrationCount++;
+                }
+            });
+
+            if (migrationCount === 0) {
+                toastr.info("All models are already migrated.");
+                return;
+            }
+
+            await update(ref(db), updates);
+            toastr.success(`Successfully migrated ${migrationCount} models!`);
+        } catch (error) {
+            toastr.error("Migration failed: " + error.message);
+        }
+    };
+
     return (
         <div className="projects-wrapper">
+            {/* Hidden migration trigger - double click the bottom right corner of the screen */}
+            <div
+                style={{ position: 'fixed', bottom: 0, right: 0, width: '30px', height: '30px', zIndex: 9999, cursor: 'default' }}
+                onDoubleClick={migrateDatabaseStructure}
+            />
             {invitations.filter((invite) => invite.status === 'Pending').length > 0 &&
                 <div className="projects-invitations">
                     <Heading className="projects-invitations-title">
@@ -1226,7 +1307,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                         const { onSelect, ...selectionProps } = getSelectionProps({ row });
                                                         return (
                                                             <TableRow key={row.id}
-                                                                      onClick={() => onOpenModel(currentProject, model)}
+                                                                      onClick={() => handleOpenModelClick(currentProject, model)}
                                                                       style={model?.type === 'dmn' ? { cursor: 'not-allowed' } : { }}>
                                                                 <TableCell className="cds--table-column-checkbox" onClick={(e) => e.stopPropagation()}>
                                                                     <Checkbox
@@ -1245,9 +1326,16 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                                                                             <OverflowMenu flipped>
                                                                                 {(model?.type === 'bpmn' || model?.type === 'dmn') &&<OverflowMenuItem
                                                                                     itemText="Download"
-                                                                                    onClick={(e) => {
+                                                    onClick={async (e) => {
                                                                                         e.stopPropagation();
-                                                                                        downloadXmlAsBpmn(model);
+                                                        const db = getDatabase();
+                                                        const xmlDataRef = ref(db, `modelXmlData/${model.id}`);
+                                                        const xmlDataSnapshot = await get(xmlDataRef);
+                                                        if (xmlDataSnapshot.exists()) {
+                                                            downloadXmlAsBpmn({ ...model, xmlData: xmlDataSnapshot.val().xmlData });
+                                                        } else {
+                                                            toastr.error('Could not load model data for download.');
+                                                        }
                                                                                     }}
                                                                                 />}
                                                                                 {(model?.type === 'bpmn' || model?.type === 'dmn') && <OverflowMenuItem
