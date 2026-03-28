@@ -739,49 +739,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         onOpenModel(project, model);
     };
 
-    const migrateDatabaseStructure = async () => {
-        const db = getDatabase();
-        const bpmnModelsRef = ref(db, 'bpmnModels');
-        
-        try {
-            const snapshot = await get(bpmnModelsRef);
-            if (!snapshot.exists()) {
-                toastr.info("No models found to migrate.");
-                return;
-            }
-
-            const models = snapshot.val();
-            const updates = {};
-            let migrationCount = 0;
-
-            Object.keys(models).forEach(modelId => {
-                const model = models[modelId];
-                if (model.xmlData) {
-                    updates[`modelXmlData/${modelId}/xmlData`] = model.xmlData;
-                    updates[`bpmnModels/${modelId}/xmlData`] = null;
-                    migrationCount++;
-                }
-            });
-
-            if (migrationCount === 0) {
-                toastr.info("All models are already migrated.");
-                return;
-            }
-
-            await update(ref(db), updates);
-            toastr.success(`Successfully migrated ${migrationCount} models!`);
-        } catch (error) {
-            toastr.error("Migration failed: " + error.message);
-        }
-    };
-
     return (
         <div className="projects-wrapper">
-            {/* Hidden migration trigger - double click the bottom right corner of the screen */}
-            <div
-                style={{ position: 'fixed', bottom: 0, right: 0, width: '30px', height: '30px', zIndex: 9999, cursor: 'default' }}
-                onDoubleClick={migrateDatabaseStructure}
-            />
             {invitations.filter((invite) => invite.status === 'Pending').length > 0 &&
                 <div className="projects-invitations">
                     <Heading className="projects-invitations-title">
