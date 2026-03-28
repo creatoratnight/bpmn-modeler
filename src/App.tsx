@@ -1,7 +1,7 @@
 import './App.css'
 import BPMNModelerComponent from "./components/BpmnModeler.tsx";
 import {auth} from './config/.firebase.js';
-import {saveBPMNModel, saveDMNodel} from './services/models.service.tsx'
+import {saveBPMNModel, saveDMNodel, getComments, saveComment, deleteComment} from './services/models.service.tsx'
 import {signInWithGoogle, signInWithMicrosoft, logout} from './services/user.service.tsx';
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState, useRef, useCallback } from "react";
@@ -11,14 +11,15 @@ import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile} from '@carbon/react';
-import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose, Share, Flag} from '@carbon/react/icons';
+import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose, Share, Flag, Chat, TrashCan} from '@carbon/react/icons';
 import { child, get, getDatabase, ref, set, query, orderByChild, equalTo } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
-import {downloadXmlAsBpmn} from './services/utils.service.tsx';
+import {downloadXmlAsBpmn, convertDateString} from './services/utils.service.tsx';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ShareModal from "./components/ShareModal.tsx";
 import MilestonesModal from "./components/MilestonesModal.tsx";
+import AddCommentModal from "./components/AddCommentModal.tsx";
 
 
 function App() {
@@ -50,6 +51,17 @@ function App() {
     const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
     const [userAvatar, setUserAvatar] = useState('user.png');
+    const [isCommentsPanelOpen, setIsCommentsPanelOpen] = useState(() => {
+        const saved = localStorage.getItem('isCommentsPanelOpen');
+        return saved ? JSON.parse(saved) : false;
+    });
+    const [commentsPanelWidth, setCommentsPanelWidth] = useState(() => {
+        const saved = localStorage.getItem('commentsPanelWidth');
+        return saved ? parseInt(saved, 10) : 300;
+    });
+    const [comments, setComments] = useState([]);
+    const [isAddCommentModalOpen, setIsAddCommentModalOpen] = useState(false);
+    const isResizingRightRef = useRef(false);
     const bpmnModelerRef = useRef(null);
     const dmnModelerRef = useRef(null);
     const [isLoadingXml, setIsLoadingXml] = useState(false);
@@ -90,14 +102,29 @@ function App() {
         localStorage.setItem('sidePanelWidth', sidePanelWidth.toString());
     }, [sidePanelWidth]);
 
+    useEffect(() => {
+        localStorage.setItem('isCommentsPanelOpen', JSON.stringify(isCommentsPanelOpen));
+    }, [isCommentsPanelOpen]);
+
+    useEffect(() => {
+        localStorage.setItem('commentsPanelWidth', commentsPanelWidth.toString());
+    }, [commentsPanelWidth]);
+
     const startResizing = useCallback(() => {
         isResizingRef.current = true;
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
     }, []);
 
+    const startResizingRight = useCallback(() => {
+        isResizingRightRef.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    }, []);
+
     const stopResizing = useCallback(() => {
         isResizingRef.current = false;
+        isResizingRightRef.current = false;
         document.body.style.cursor = 'default';
         document.body.style.userSelect = 'auto';
     }, []);
@@ -111,6 +138,23 @@ function App() {
         }
     }, []);
 
+    const resizeRight = useCallback((mouseMoveEvent) => {
+        if (isResizingRightRef.current) {
+            const newWidth = window.innerWidth - mouseMoveEvent.clientX;
+            if (newWidth > 200 && newWidth < 800) {
+                setCommentsPanelWidth(newWidth);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (model?.id) {
+            getComments(model.id).then(setComments);
+        } else {
+            setComments([]);
+        }
+    }, [model?.id]);
+
     useEffect(() => {
         setTimeout(() => {
             if (viewMode === 'BPMN' && bpmnModelerRef.current) {
@@ -120,16 +164,18 @@ function App() {
                 dmnModelerRef.current.handleResize();
             }
         }, 100);
-    }, [isProjectViewerOpen, viewMode]);
+    }, [isProjectViewerOpen, isCommentsPanelOpen, viewMode]);
 
     useEffect(() => {
         window.addEventListener("mousemove", resize);
+        window.addEventListener("mousemove", resizeRight);
         window.addEventListener("mouseup", stopResizing);
         return () => {
             window.removeEventListener("mousemove", resize);
+            window.removeEventListener("mousemove", resizeRight);
             window.removeEventListener("mouseup", stopResizing);
         };
-    }, [resize, stopResizing]);
+    }, [resize, resizeRight, stopResizing]);
 
     toastr.options = {
         closeButton: false,
@@ -541,6 +587,27 @@ function App() {
         handleNavigation(path);
     };
 
+    const handleAddComment = async (text) => {
+        try {
+            await saveComment(model.id, text, user);
+            toastr.success('Comment added');
+            setIsAddCommentModalOpen(false);
+            getComments(model.id).then(setComments);
+        } catch (error) {
+            toastr.error('Failed to add comment');
+        }
+    };
+
+    const handleDeleteComment = async (commentId) => {
+        try {
+            await deleteComment(model.id, commentId);
+            toastr.success('Comment deleted');
+            getComments(model.id).then(setComments);
+        } catch (error) {
+            toastr.error('Failed to delete comment');
+        }
+    };
+
     return (
       <div className="App">
           {model && <SaveModal
@@ -573,6 +640,11 @@ function App() {
                       dmnModelerRef.current.importXML(xml).then(() => handleModelChange(xml));
                   }
               }}
+          />
+          <AddCommentModal
+              isOpen={isAddCommentModalOpen}
+              onClose={() => setIsAddCommentModalOpen(false)}
+              onAddComment={handleAddComment}
           />
           <Tile className="header">
               <div className="header-logo">
@@ -745,7 +817,7 @@ function App() {
                                           setAutoSave(checked)
                                       }}
                                   />}
-                              <div style={{ display: 'flex', gap: 0 }}>
+                              <div style={{ display: 'flex', gap: 0, height: '48px' }}>
                                   {viewMode === 'BPMN' && changes &&
                                       <Button onClick={() => onSaveModelClick(model)}>
                                           <Save className="project-name-icon"/> Save
@@ -763,6 +835,16 @@ function App() {
                                           <Flag className="project-name-icon"/> Milestones
                                       </Button>
                                   }
+                              {(viewMode === 'BPMN' || viewMode === 'DMN') &&
+                                  <Button
+                                      onClick={() => setIsCommentsPanelOpen(!isCommentsPanelOpen)}
+                                      className={isCommentsPanelOpen ? "selected" : ""}
+                                      hasIconOnly
+                                      renderIcon={Chat}
+                                      iconDescription={isCommentsPanelOpen ? "Close comments panel" : "Open comments panel"}
+                                      tooltipPosition="bottom"
+                                  />
+                              }
                               </div>
                           </div>
                       </div>
@@ -774,6 +856,58 @@ function App() {
                       {viewMode === 'BPMN' && !isLoadingXml && <BPMNModelerComponent key={model.id} ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
                       {viewMode === 'DMN' && !isLoadingXml && <DMNModelerComponent key={model.id} ref={dmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
                   </div>
+              <div style={{
+                  width: isCommentsPanelOpen ? `${commentsPanelWidth}px` : '0px',
+                  minWidth: isCommentsPanelOpen ? `${commentsPanelWidth}px` : '0px',
+                  maxHeight: 'calc(100vh - 64px)',
+                  borderLeft: isCommentsPanelOpen ? '2px solid #e0e0e0' : '0px solid #e0e0e0',
+                  backgroundColor: '#efefef',
+                  zIndex: 900,
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'width 0.2s ease-in-out, min-width 0.2s ease-in-out',
+                  overflow: 'hidden'
+              }}>
+                  <div style={{ height: '2px', width: '100%', backgroundColor: '#e0e0e0', flexShrink: 0 }}></div>
+                  <div style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e0e0e0' }}>
+                      <strong>Comments</strong>
+                      <Button size="sm" onClick={() => setIsAddCommentModalOpen(true)}>Add Comment</Button>
+                  </div>
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {comments.map(comment => (
+                          <div key={comment.id} style={{ backgroundColor: '#ffffff', padding: '0.75rem', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#525252' }}>
+                                  <strong>{comment.creatorName}</strong>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                      <span>{convertDateString(comment.createdAt)}</span>
+                                      {comment.createdBy === user.uid && (
+                                          <TrashCan
+                                              style={{ cursor: 'pointer', fill: '#da1e28' }}
+                                              onClick={() => handleDeleteComment(comment.id)}
+                                              title="Delete comment"
+                                          />
+                                      )}
+                                  </div>
+                              </div>
+                              <div style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap' }}>{comment.text}</div>
+                          </div>
+                      ))}
+                      {comments.length === 0 && <div style={{ color: '#8d8d8d', textAlign: 'center', marginTop: '2rem' }}>No comments yet.</div>}
+                  </div>
+                  <div
+                      onMouseDown={startResizingRight}
+                      style={{
+                          width: '5px',
+                          cursor: 'col-resize',
+                          height: '100%',
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          zIndex: 1000
+                      }}
+                  />
+              </div>
               </div>
           ) : (
               <>
