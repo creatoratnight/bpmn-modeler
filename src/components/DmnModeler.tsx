@@ -68,6 +68,11 @@ const DMNModelerComponent = forwardRef(({ xml, viewPosition, onDMNChange, onView
                     activeViewer.get('canvas').resized();
                 }
             }
+        },
+        importXML: (newXml) => {
+            if (modelerInstance.current) {
+                return modelerInstance.current.importXML(newXml);
+            }
         }
     }));
 

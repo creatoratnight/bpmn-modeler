@@ -11,13 +11,14 @@ import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
 import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile} from '@carbon/react';
-import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose, Share} from '@carbon/react/icons';
+import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose, Share, Flag} from '@carbon/react/icons';
 import { child, get, getDatabase, ref, set, query, orderByChild, equalTo } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
 import config from './config/config';
 import {downloadXmlAsBpmn} from './services/utils.service.tsx';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ShareModal from "./components/ShareModal.tsx";
+import MilestonesModal from "./components/MilestonesModal.tsx";
 
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
     const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
     const [userAvatar, setUserAvatar] = useState('user.png');
     const bpmnModelerRef = useRef(null);
@@ -558,6 +560,20 @@ function App() {
               onClose={() => setIsShareModalOpen(false)}
               url={shareUrl}
           />
+          <MilestonesModal
+              isOpen={isMilestonesModalOpen}
+              onClose={() => setIsMilestonesModalOpen(false)}
+              model={model}
+              user={user}
+              changes={changes}
+              onLoadMilestone={(xml) => {
+                  if (viewMode === 'BPMN' && bpmnModelerRef.current) {
+                      bpmnModelerRef.current.importXML(xml).then(() => handleModelChange(xml));
+                  } else if (viewMode === 'DMN' && dmnModelerRef.current) {
+                      dmnModelerRef.current.importXML(xml).then(() => handleModelChange(xml));
+                  }
+              }}
+          />
           <Tile className="header">
               <div className="header-logo">
                   <img src="/bpmn_modeler_logo.png" alt="valtimo academy logo"/>
@@ -729,18 +745,25 @@ function App() {
                                           setAutoSave(checked)
                                       }}
                                   />}
-                              {viewMode === 'BPMN' && changes &&
-                                  <Button onClick={() => onSaveModelClick(model)}>
-                                      <Save className="project-name-icon"/> Save
-                                  </Button>}
-                              {viewMode === 'BPMN' && !changes &&
-                                  <Button onClick={() => onSaveModelClick(model)} disabled>
-                                      <Save className="project-name-icon"/> Save
-                                  </Button>}
-                              {viewMode === 'DMN' &&
-                                  <Button onClick={() => onSaveDMNClick(model)}>
-                                      Save
-                                  </Button>}
+                              <div style={{ display: 'flex', gap: 0 }}>
+                                  {viewMode === 'BPMN' && changes &&
+                                      <Button onClick={() => onSaveModelClick(model)}>
+                                          <Save className="project-name-icon"/> Save
+                                      </Button>}
+                                  {viewMode === 'BPMN' && !changes &&
+                                      <Button onClick={() => onSaveModelClick(model)} disabled>
+                                          <Save className="project-name-icon"/> Save
+                                      </Button>}
+                                  {viewMode === 'DMN' &&
+                                      <Button onClick={() => onSaveDMNClick(model)}>
+                                          <Save className="project-name-icon"/> Save
+                                      </Button>}
+                                  {(viewMode === 'BPMN' || viewMode === 'DMN') &&
+                                      <Button kind="secondary" onClick={() => setIsMilestonesModalOpen(true)}>
+                                          <Flag className="project-name-icon"/> Milestones
+                                      </Button>
+                                  }
+                              </div>
                           </div>
                       </div>
                       {isLoadingXml && (

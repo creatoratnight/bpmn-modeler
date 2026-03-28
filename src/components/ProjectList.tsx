@@ -535,6 +535,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         const updates = {};
         updates[`/bpmnModels/${modelId}`] = null;
         updates[`/modelXmlData/${modelId}`] = null;
+        updates[`/milestones/${modelId}`] = null;
         updates[`/projects/${currentProject.id}/models/${modelId}`] = null;
 
         update(ref(db), updates).then(() => {
@@ -553,6 +554,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         models.forEach(model => {
             updates[`bpmnModels/${model.id}`] = null;
             updates[`modelXmlData/${model.id}`] = null;
+            updates[`milestones/${model.id}`] = null;
             updates[`projects/${currentProject.id}/models/${model.id}`] = null;
         });
 

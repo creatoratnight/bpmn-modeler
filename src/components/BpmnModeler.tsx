@@ -58,6 +58,11 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
                 const canvas = modelerInstance.current.get('canvas');
                 canvas.resized();
             }
+        },
+        importXML: (newXml) => {
+            if (modelerInstance.current) {
+                return modelerInstance.current.importXML(newXml);
+            }
         }
     }));
 
