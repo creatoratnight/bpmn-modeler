@@ -1,5 +1,5 @@
 const config = {
-    bpmnModelerVersion: "0.4.1",
+    bpmnModelerVersion: "0.5.0",
     enableGoogleSignIn: true,
     enableMicrosoftSignIn: true,
   };
