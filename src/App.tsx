@@ -308,7 +308,7 @@ function App() {
                 return;
             }
 
-            if (projectRef.current?.id !== p.id) setProject(p);
+            if (projectRef.current !== p) setProject(p);
 
             const folderMatch = path.match(/^\/project\/[^\/]+\/folder\/([^\/]+)/);
             const modelMatch = path.match(/^\/project\/[^\/]+\/model\/([^\/]+)/);
@@ -317,7 +317,7 @@ function App() {
                 const decodedFolderName = decodeURIComponent(folderMatch[1]);
                 const f = p.folders?.find(f => f.name === decodedFolderName);
                 if (f) {
-                    if (folderRef.current?.id !== f.id) setfolder(f);
+                    if (folderRef.current !== f) setfolder(f);
                     if (modelRef.current?.id) setModel({});
                     if (viewMode !== 'BPMN' && viewMode !== 'DMN') {
                         if (viewMode !== 'PROJECT') setViewMode('PROJECT');
@@ -332,7 +332,7 @@ function App() {
                 if (m) {
                     if (m.folder) {
                         const f = p.folders?.find(folder => folder.id === m.folder);
-                        if (f && folderRef.current?.id !== f.id) setfolder(f);
+                        if (f && folderRef.current !== f) setfolder(f);
                     } else if (folderRef.current?.id) {
                         setfolder({});
                     }

@@ -119,6 +119,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             }).then(() => {
                 toastr.success('New project added successfully');
                 fetchUserProjects();
+                setIsAddProjectModalOpen(false);
             }).catch((error) => {
                 toastr.error('Error adding new project: ', error);
             });
@@ -133,6 +134,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             .then(() => {
                 fetchUserProjects();
                 toastr.success("Project name updated successfully");
+                setIsRenameProjectModalOpen(false);
             })
             .catch((error) => toastr.error("Error updating project name: ", error));
     }
@@ -174,6 +176,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             update(ref(db), updates).then(() => {
                 toastr.success('New BPMN model added successfully');
                 fetchUserProjects();
+                setIsAddModelModalOpen(false);
             }).catch((error) => {
                 toastr.error('Error adding new BPMN model: ', error);
             });
@@ -224,6 +227,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
             update(ref(db), updates).then(() => {
                 toastr.success('New DMN model added successfully');
                 fetchUserProjects();
+                setIsAddDMNModalOpen(false);
             }).catch((error) => {
                 toastr.error('Error adding new DMN model: ', error);
             });
@@ -247,6 +251,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 updateLastChangedDate(projectId);
                 fetchUserProjects();
                 toastr.success('New folder added successfully');
+                setIsAddFolderModalOpen(false);
             })
         }
     };
@@ -311,6 +316,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 updateLastChangedDate(currentProject.id);
                 fetchUserProjects();
                 toastr.success("Model name updated successfully");
+                setIsRenameModelModalOpen(false);
             })
             .catch((error) => toastr.error("Error updating model name: ", error));
     }
@@ -324,6 +330,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 updateLastChangedDate(projectId);
                 fetchUserProjects();
                 toastr.success("Folder name updated successfully");
+                setIsRenameFolderModalOpen(false);
             })
             .catch((error) => toastr.error("Error updating model name: ", error));
     }
@@ -344,6 +351,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                 fetchUserProjects();
                 toastr.success(modelsToUpdate.length > 1 ? "Models moved successfully" : "Model moved successfully");
                 setBulkMoveModels([]);
+                setIsMoveModelModalOpen(false);
             })
             .catch((error) => toastr.error("Error moving model: ", error));
     }
