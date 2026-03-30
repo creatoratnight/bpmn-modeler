@@ -85,7 +85,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     useEffect(() => {
         fetchUserProjects();
         fetchInvites();
-    }, [user.uid, fetchUserProjects]);
+    }, [user.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Save side panel state to localStorage
     useEffect(() => {
@@ -494,25 +494,20 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                     let senderEmail = 'Unknown';
                     let projectName = 'Unknown';
 
-                    try {
-                        const senderSnapshot = await get(ref(db, `users/${invitation.senderId}`));
-                        if (senderSnapshot.exists()) {
-                            const senderData = senderSnapshot.val();
-                            senderName = senderData.displayName || 'Unknown';
-                            senderEmail = senderData.email || 'Unknown';
-                        }
-                    } catch (error) {
-                        console.error('Error fetching sender details:', error);
+                    // Fetch sender and project in parallel instead of sequentially
+                    const [senderSnapshot, projectSnapshot] = await Promise.allSettled([
+                        get(ref(db, `users/${invitation.senderId}`)),
+                        get(ref(db, `projects/${invitation.projectId}`))
+                    ]);
+
+                    if (senderSnapshot.status === 'fulfilled' && senderSnapshot.value.exists()) {
+                        const senderData = senderSnapshot.value.val();
+                        senderName = senderData.displayName || 'Unknown';
+                        senderEmail = senderData.email || 'Unknown';
                     }
 
-                    try {
-                        const projectSnapshot = await get(ref(db, `projects/${invitation.projectId}`));
-                        if (projectSnapshot.exists()) {
-                            const projectData = projectSnapshot.val();
-                            projectName = projectData.name || 'Unknown';
-                        }
-                    } catch (error) {
-                        console.error('Error fetching project details:', error);
+                    if (projectSnapshot.status === 'fulfilled' && projectSnapshot.value.exists()) {
+                        projectName = projectSnapshot.value.val().name || 'Unknown';
                     }
 
                     return {

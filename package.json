@@ -18,6 +18,7 @@
     "diagram-js-minimap": "^5.2.0",
     "dmn-js": "^15.1.0",
     "firebase": "^10.8.0",
+    "firebase-tools": "^15.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.5.0",

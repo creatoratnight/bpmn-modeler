@@ -397,6 +397,10 @@ function App() {
         setIsShareModalOpen(true);
     };
 
+    const fetchCurrentUserProjects = useCallback(() => {
+        if (user?.uid) fetchUserProjects(user.uid);
+    }, [fetchUserProjects, user?.uid]);
+
     const onSaveModelClick = (model) => {
         saveBPMNModel(model).then(() => fetchUserProjects(user.uid));
         setChanges(false);
@@ -432,14 +436,10 @@ function App() {
         };
         setModel(updatedModel);
         if (autoSaveRef.current) {
-            saveBPMNModel(updatedModel).then(() => {
-                if (projectRef.current?.id) {
-                    fetchUserProjects(user.uid);
-                }
-            });
+            saveBPMNModel(updatedModel);
             setChanges(false);
         }
-    }, [fetchUserProjects]);
+    }, []);
 
     const handleViewPositionChange = (viewbox) => {
         setViewPosition(viewbox);
@@ -648,7 +648,7 @@ function App() {
           />
           <Tile className="header">
               <div className="header-logo">
-                  <img src="/bpmn_modeler_logo.png" alt="valtimo academy logo"/>
+                  <img src="/valtimo-designer-logo.png" alt="valtimo academy logo"/>
               </div>
               <div className="header-nav">
                   {user && <div className="nav-projects-folder" onClick={onMyProjectsNavClick}>
@@ -918,14 +918,14 @@ function App() {
                           <br/><Button onClick={() => handleNavigation('/')}>Back to Projects</Button>
                       </div>
                   )}
-                  {(viewMode === 'ALL_PROJECTS' || viewMode === 'PROJECT') && user && isProjectsLoaded && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel} projects={projects} fetchUserProjects={() => fetchUserProjects(user.uid)} onOpenShareModal={handleOpenShareModal} />}
+                  {(viewMode === 'ALL_PROJECTS' || viewMode === 'PROJECT') && user && isProjectsLoaded && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel} projects={projects} fetchUserProjects={fetchCurrentUserProjects} onOpenShareModal={handleOpenShareModal} />}
                   {(viewMode === 'INITIALIZING' || (user && !isProjectsLoaded)) && (
                       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px)', width: '100%', color: '#8d8d8d' }}>
                           <h2>Loading...</h2>
                       </div>
                   )}
                   {!user && <div className="welcome-wrapper">
-                      <img src="/bpmn_modeler_logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
+                      <img src="/valtimo-designer-logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
                       <div className="welcome-title">
                           Welcome to BPMN Modeler!
                       </div>
