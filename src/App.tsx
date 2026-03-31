@@ -233,28 +233,45 @@ function App() {
         
         if (userProjectsSnapshot.exists()) {
             const userProjectsIds = Object.keys(userProjectsSnapshot.val());
-            const bpmnModelsSnapshot = await get(ref(db, 'bpmnModels'));
-            const usersSnapshot = await get(ref(db, 'users'));
 
-            const bpmnModelsData = bpmnModelsSnapshot.exists() ? bpmnModelsSnapshot.val() : {};
-            const usersData = usersSnapshot.exists() ? usersSnapshot.val() : {};
-
+            // Fetch only the specific projects this user belongs to
             const projectsPromises = userProjectsIds.map((projectId) => get(ref(db, `projects/${projectId}`)));
             const projectsSnapshots = await Promise.all(projectsPromises);
-            const userProjects = projectsSnapshots
-                .filter((snapshot) => snapshot.exists())
-                .map((snapshot) => {
+            const validProjectSnapshots = projectsSnapshots.filter((snapshot) => snapshot.exists());
+
+            // Collect only the member IDs and model IDs we actually need
+            const allMemberIds = new Set<string>();
+            const allModelIds = new Set<string>();
+            validProjectSnapshots.forEach((snapshot) => {
+                const projectData = snapshot.val();
+                Object.keys(projectData.members || {}).forEach(id => allMemberIds.add(id));
+                Object.keys(projectData.models || {}).forEach(id => allModelIds.add(id));
+            });
+
+            // Fetch only the specific users and models needed, in parallel
+            const [usersResults, modelsResults] = await Promise.all([
+                Promise.all([...allMemberIds].map(id => get(ref(db, `users/${id}`)))),
+                Promise.all([...allModelIds].map(id => get(ref(db, `bpmnModels/${id}`))))
+            ]);
+
+            const usersData: Record<string, any> = {};
+            usersResults.forEach(snap => { if (snap.exists()) usersData[snap.key!] = snap.val(); });
+
+            const bpmnModelsData: Record<string, any> = {};
+            modelsResults.forEach(snap => { if (snap.exists()) bpmnModelsData[snap.key!] = snap.val(); });
+
+            const userProjects = validProjectSnapshots.map((snapshot) => {
                     const projectId = snapshot.key;
                     const projectData = snapshot.val();
-                    const projectModels = Object.keys(bpmnModelsData)
-                        .filter(modelId => bpmnModelsData[modelId].projectId === projectId)
+                    const projectModels = Object.keys(projectData.models || {})
+                        .filter(modelId => bpmnModelsData[modelId])
                         .map(modelId => ({
                             id: modelId,
                             ...bpmnModelsData[modelId]
                         }));
 
                     const projectFolders = Object.keys(projectData?.folders ?? {}).map(folderId => ({
-                        id: folderId, 
+                        id: folderId,
                         name: projectData.folders[folderId].name,
                         type: 'folder',
                         owner: '',
@@ -919,7 +936,7 @@ function App() {
                       </div>
                   )}
                   {(viewMode === 'ALL_PROJECTS' || viewMode === 'PROJECT') && user && isProjectsLoaded && <ProjectList user={user} viewMode={viewMode} currentProject={project} selectedFolder={folder} onOpenProject={handleOpenProject} onNavigateHome={handleNavigateHome} onOpenModel={handleOpenModel} projects={projects} fetchUserProjects={fetchCurrentUserProjects} onOpenShareModal={handleOpenShareModal} />}
-                  {(viewMode === 'INITIALIZING' || (user && !isProjectsLoaded)) && (
+                  {user && (viewMode === 'INITIALIZING' || !isProjectsLoaded) && (
                       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 64px)', width: '100%', color: '#8d8d8d' }}>
                           <h2>Loading...</h2>
                       </div>
