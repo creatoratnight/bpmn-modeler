@@ -14,13 +14,15 @@ const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
         const db = getDatabase();
 
         const invitationsRef = ref(db, 'invitations');
-        const duplicateQuery = query(invitationsRef, orderByChild('projectId'), equalTo(projectId));
+        // Query by invitedEmail (a specific value) rather than by projectId (potentially many results)
+        // then filter by projectId client-side — far fewer records travel over the wire
+        const duplicateQuery = query(invitationsRef, orderByChild('invitedEmail'), equalTo(inviteEmail));
 
         try {
             const snapshot = await get(duplicateQuery);
             if (snapshot.exists()) {
                 const invites = snapshot.val();
-                const isDuplicate = Object.values(invites).some((invite: any) => invite.invitedEmail === inviteEmail && invite.status === 'Pending');
+                const isDuplicate = Object.values(invites).some((invite: any) => invite.projectId === projectId && invite.status === 'Pending');
                 if (isDuplicate) {
                     toastr.warning('An invitation is already pending for this email address.');
                     return;
