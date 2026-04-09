@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.limitOnBudgetAlert = void 0;
 const pubsub_1 = require("firebase-functions/v2/pubsub");
 const google_auth_library_1 = require("google-auth-library");
-const PROJECT_ID = process.env.GCLOUD_PROJECT;
+const DATABASE_URL = process.env.DATABASE_URL;
 const DENY_ALL_RULES = JSON.stringify({
     rules: { ".read": false, ".write": false }
 });
@@ -26,7 +26,7 @@ async function lockRealtimeDatabase() {
     });
     const client = await auth.getClient();
     // Overwrite the RTDB security rules with deny-all
-    const url = `https://${PROJECT_ID}-default-rtdb.firebaseio.com/.settings/rules.json`;
+    const url = `${DATABASE_URL}/.settings/rules.json`;
     await client.request({
         url,
         method: "PUT",
