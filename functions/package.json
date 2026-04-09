@@ -3,8 +3,13 @@
   "description": "Cloud Functions for bpmn-modeler",
   "scripts": {
     "build": "tsc",
-    "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "sync-config": "node scripts/sync-config.js",
+    "preemulate": "npm run sync-config",
+    "emulate": "npm run build && node scripts/start-emulator.js",
+    "serve": "npm run build && node scripts/start-emulator.js",
+    "pretest": "npm run sync-config",
+    "test": "jest",
+    "deploy": "node scripts/deploy.js"
   },
   "engines": {
     "node": "22"
@@ -17,7 +22,18 @@
     "google-auth-library": "^9.0.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "typescript": "^5.2.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/src/**/*.test.ts"],
+    "setupFiles": ["./jest.setup.js"],
+    "transform": {
+      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
+    }
   },
   "private": true
 }

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Auto-generated Firebase emulator config
+functions/.env
+
 # Editor directories and files
 .firebase*
 .vscode/*
