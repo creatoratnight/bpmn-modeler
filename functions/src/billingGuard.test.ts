@@ -44,7 +44,7 @@ describe("limitOnBudgetAlert", () => {
 
   it("does NOT lock the database when cost is below budget", async () => {
     await (limitOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 3, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 3, budgetAmount: 5 })
     );
 
     expect(mockRequest).not.toHaveBeenCalled();
@@ -52,7 +52,7 @@ describe("limitOnBudgetAlert", () => {
 
   it("locks the database when cost equals the budget", async () => {
     await (limitOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 5, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 5, budgetAmount: 5 })
     );
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
@@ -66,7 +66,7 @@ describe("limitOnBudgetAlert", () => {
 
   it("locks the database when cost exceeds the budget", async () => {
     await (limitOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 10, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 10, budgetAmount: 5 })
     );
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
@@ -77,7 +77,7 @@ describe("limitOnBudgetAlert", () => {
 
   it("sends the PUT to the correct RTDB URL for the project", async () => {
     await (limitOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 10, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 10, budgetAmount: 5 })
     );
 
     expect(mockRequest).toHaveBeenCalledWith(
@@ -90,14 +90,14 @@ describe("limitOnBudgetAlert", () => {
   it("does NOT lock the database when cost is zero and budget is zero", async () => {
     // 0 >= 0 is true — function will lock. This test documents that edge-case behaviour.
     await (limitOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 0, budgetAmount: { units: 0 } })
+      makeEvent({ costAmount: 0, budgetAmount: 0 })
     );
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
   });
 
   it("locks when budgetAmount is missing (defaults to 0) and cost is positive", async () => {
-    // budgetAmount?.units ?? 0 → 0; any positive cost triggers the lock
+    // budgetAmount ?? 0 → 0; any positive cost triggers the lock
     await (limitOnBudgetAlert as unknown as Function)(
       makeEvent({ costAmount: 1 })
     );

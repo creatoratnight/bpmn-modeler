@@ -9,10 +9,10 @@ const DENY_ALL_RULES = JSON.stringify({
 });
 // Triggered by the Pub/Sub billing alert
 exports.limitOnBudgetAlert = (0, pubsub_1.onMessagePublished)("billing-resource-limit", async (event) => {
-    var _a, _b;
+    var _a;
     const budgetData = JSON.parse(Buffer.from(event.data.message.data, "base64").toString());
     const costAmount = budgetData.costAmount;
-    const budgetAmount = (_b = (_a = budgetData.budgetAmount) === null || _a === void 0 ? void 0 : _a.units) !== null && _b !== void 0 ? _b : 0;
+    const budgetAmount = (_a = budgetData.budgetAmount) !== null && _a !== void 0 ? _a : 0;
     console.log(`Budget alert: spent $${costAmount} of $${budgetAmount}`);
     // Only act if we've actually hit/exceeded the threshold
     if (costAmount >= budgetAmount) {
