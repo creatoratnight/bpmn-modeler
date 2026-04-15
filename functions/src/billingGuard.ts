@@ -13,7 +13,7 @@ export const limitOnBudgetAlert = onMessagePublished("billing-resource-limit", a
     );
 
     const costAmount   = budgetData.costAmount;
-    const budgetAmount = budgetData.budgetAmount?.units ?? 0;
+    const budgetAmount = budgetData.budgetAmount ?? 0;
 
     console.log(`Budget alert: spent $${costAmount} of $${budgetAmount}`);
 

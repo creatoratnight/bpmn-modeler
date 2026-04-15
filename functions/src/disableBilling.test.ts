@@ -39,7 +39,7 @@ describe("disableOnBudgetAlert", () => {
 
   it("takes no action when cost is below budget", async () => {
     await (disableOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 3, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 3, budgetAmount: 5 })
     );
 
     expect(mockGetProjectBillingInfo).not.toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe("disableOnBudgetAlert", () => {
     mockGetProjectBillingInfo.mockResolvedValue([{ billingEnabled: false }]);
 
     await (disableOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 10, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 10, budgetAmount: 5 })
     );
 
     expect(mockGetProjectBillingInfo).toHaveBeenCalledTimes(1);
@@ -62,7 +62,7 @@ describe("disableOnBudgetAlert", () => {
     mockUpdateProjectBillingInfo.mockResolvedValue([{}]);
 
     await (disableOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 5, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 5, budgetAmount: 5 })
     );
 
     expect(mockUpdateProjectBillingInfo).toHaveBeenCalledTimes(1);
@@ -79,7 +79,7 @@ describe("disableOnBudgetAlert", () => {
     mockUpdateProjectBillingInfo.mockResolvedValue([{}]);
 
     await (disableOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 99, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 99, budgetAmount: 5 })
     );
 
     expect(mockUpdateProjectBillingInfo).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ describe("disableOnBudgetAlert", () => {
     mockUpdateProjectBillingInfo.mockResolvedValue([{}]);
 
     await (disableOnBudgetAlert as unknown as Function)(
-      makeEvent({ costAmount: 10, budgetAmount: { units: 5 } })
+      makeEvent({ costAmount: 10, budgetAmount: 5 })
     );
 
     expect(mockGetProjectBillingInfo).toHaveBeenCalledWith(

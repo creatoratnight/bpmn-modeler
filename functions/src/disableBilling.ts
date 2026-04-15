@@ -10,7 +10,7 @@ export const disableOnBudgetAlert = onMessagePublished("billing-disable-cutoff",
     );
 
     const costAmount   = data.costAmount   ?? 0;
-    const budgetAmount = data.budgetAmount?.units ?? 0;
+    const budgetAmount = data.budgetAmount ?? 0;
 
     console.log(`Billing alert: $${costAmount} spent of $${budgetAmount} budget`);
 

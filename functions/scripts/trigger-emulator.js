@@ -55,7 +55,8 @@ if (!VALID_TOPICS.includes(topic)) {
 // ── Build the budget alert payload ─────────────────────────────────────────────
 const payload = {
   costAmount,
-  budgetAmount: { units: budgetAmt, currencyCode: "USD" },
+  budgetAmount: budgetAmt,
+  currencyCode: "USD",
   budgetDisplayName: "Emulator Test Budget",
   alertThresholdExceeded: costAmount >= budgetAmt ? 1.0 : costAmount / budgetAmt,
 };
