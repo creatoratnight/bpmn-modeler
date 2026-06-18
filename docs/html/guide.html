@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>User Guide — BPMN Modeler</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">User Guide</span>
+    <a class="md-link" href="../guide.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">User Guide</p>
+      <h1>BPMN Modeler</h1>
+      <p class="lede">BPMN Modeler is an open-source, browser-based tool for creating and collaborating on BPMN 2.0 (process diagrams) and DMN 1.3 (decision tables). It requires a Google or Microsoft account to sign in, stores all data in Firebase Realtime Database, and runs entirely in the browser — no installation required.</p>
+
+      <section>
+        <h2>1. Getting started</h2>
+
+        <h3>Sign in</h3>
+        <p>The sign-in buttons shown in the header are controlled by two feature flags in <code>src/config/config.js</code>:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Button</th><th>Flag</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td>Sign in with Google</td><td><code>enableGoogleSignIn</code></td><td><code>true</code></td></tr>
+            <tr><td>Sign in with Microsoft</td><td><code>enableMicrosoftSignIn</code></td><td><code>true</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Both open a browser pop-up. On first sign-in a new user record is created in the database with your email, display name, and profile avatar. On subsequent sign-ins the record is updated with the latest profile data and a <code>lastLogin</code> timestamp.</p>
+        <p><strong>Google avatar</strong> — taken directly from the Google profile photo.</p>
+        <p><strong>Microsoft avatar</strong> — fetched from the Microsoft Graph API (<code>/me/photo/$value</code>) using the OAuth access token. The image is stored as a base64 data URL.</p>
+        <p><strong>Cross-provider account linking</strong> — if you attempt to sign in with a provider (e.g. Google) and the email address already belongs to an account created with the other provider (Microsoft), the application automatically links the two credentials to one account. You can then sign in with either provider.</p>
+
+        <h3>Sign out</h3>
+        <p>Click your avatar in the top-right corner and choose <strong>Logout</strong>. If you have unsaved diagram changes, a dialog asks whether to save them first before signing out.</p>
+
+        <h3>Welcome screen</h3>
+        <p>When not signed in, the application shows a welcome screen with the app name and tagline. All project and editor views are gated behind authentication.</p>
+      </section>
+
+      <section>
+        <h2>2. Projects</h2>
+
+        <h3>Viewing your projects</h3>
+        <p>Once signed in, the home screen shows two tables:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Table</th><th>Contents</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Your Projects</strong></td><td>Projects where you are the owner.</td></tr>
+            <tr><td><strong>Shared with me</strong></td><td>Projects where another user is the owner but you are a member.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Each row shows the project name, number of models, last changed date, and member avatars (up to 4 avatars; overflow shown as <code>+N</code>). Columns are sortable — click any column header to sort ascending; click again for descending.</p>
+
+        <h3>Creating a project</h3>
+        <p>Click <strong>Add Project</strong>. Enter a name (must be non-empty) and confirm. The project is immediately created with you as the sole <code>owner</code> member.</p>
+
+        <h3>Opening a project</h3>
+        <p>Click any project row to navigate to the project view (<code>/project/{name}</code>).</p>
+
+        <h3>Renaming a project</h3>
+        <p>Open the project, then click the overflow menu (⋮) in the project heading and choose <strong>Rename Project</strong>. Only the project owner sees this option.</p>
+
+        <h3>Deleting a project</h3>
+        <p>Overflow menu → <strong>Delete Project</strong> (owner only). Confirmation required. Deletes the project record, all its BPMN/DMN models, all XML data, all milestones, and all invitations.</p>
+
+        <h3>Leaving a project</h3>
+        <p>Overflow menu → <strong>Leave Project</strong> (non-owners only). Confirmation required. Removes you from the member list and from your personal project index.</p>
+
+        <h3>Pending invitations</h3>
+        <p>If you have pending invitations, a banner appears above the project list. Each invitation shows the project name and sender. You can <strong>Accept</strong> (adds you as an <code>editor</code>) or <strong>Decline</strong> (marks the invitation declined; it is not deleted from the database).</p>
+      </section>
+
+      <section>
+        <h2>3. Folders</h2>
+        <p>Folders exist inside a project and are used to organise models. They are <strong>embedded inside the project record</strong> in the database (not a separate top-level collection). A folder can be created only at the project root — you cannot nest folders inside other folders.</p>
+
+        <h3>Creating a folder</h3>
+        <p>In the project view, click <strong>Add Folder</strong> in the toolbar (only visible when you are at the project root, not inside a folder). Enter a name.</p>
+
+        <h3>Opening a folder</h3>
+        <p>Click the folder row in the models table. The URL changes to <code>/project/{name}/folder/{folderName}</code> and the table shows only the models inside that folder. A <code>..</code> entry at the top of the list navigates back to the project root.</p>
+
+        <h3>Renaming a folder</h3>
+        <p>Overflow menu on the folder row → <strong>Rename</strong> (available to folder owner or project owner).</p>
+
+        <h3>Deleting a folder</h3>
+        <p>Overflow menu → <strong>Delete Folder</strong>. This option is <strong>disabled</strong> (greyed out, not hidden) when the folder still contains models. The folder must be empty before it can be deleted.</p>
+      </section>
+
+      <section>
+        <h2>4. Models</h2>
+
+        <h3>Model types</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Type</th><th>File format</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>BPMN</td><td><code>.bpmn</code></td><td>Fully supported.</td></tr>
+            <tr><td>DMN</td><td><code>.dmn</code></td><td>Can be created, uploaded, and stored; editor has limited support — opening a DMN model from the project side panel is marked <code>not-allowed</code>.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Creating a model</h3>
+        <p>Click <strong>Add BPMN</strong> or <strong>Add DMN</strong> in the toolbar. Enter a name — it must match <code>/^[a-zA-Z_][\w-.\s]*$/</code> (start with a letter or underscore; only letters, digits, <code>_</code>, <code>-</code>, <code>.</code>, and spaces allowed). A camelCase version of the name is used as the XML process/decision <code>id</code>.</p>
+
+        <h3>Importing a model from file</h3>
+        <p>Click <strong>Import</strong> to open the file picker. You may select multiple <code>.bpmn</code> and/or <code>.dmn</code> files at once. The model name is extracted from the XML (<code>bpmn:process name</code> or <code>decision name</code> attribute); if that attribute is absent the filename (minus extension) is used.</p>
+
+        <h3>Opening a model for editing</h3>
+        <p>Click any model row. The URL changes to <code>/project/{name}/model/{id}</code>. If you have unsaved changes in the currently open model, a warning toast is shown and navigation is blocked until you save or discard.</p>
+
+        <h3>Renaming a model</h3>
+        <p>Overflow menu → <strong>Rename</strong> (model owner or project owner). Same name validation as creation. On rename, the XML <code>id</code> and <code>name</code> attributes of the root process/decision element are updated to match.</p>
+
+        <h3>Duplicating a model</h3>
+        <p>Overflow menu → <strong>Duplicate</strong>. Creates a copy with " Copy" appended to the name, in the same folder as the original. The full XML is copied.</p>
+
+        <h3>Moving a model to a folder</h3>
+        <p>Overflow menu → <strong>Move to...</strong> (model/project owner). A dialog shows all folders in the project plus a "Project root (No Folder)" option.</p>
+
+        <h3>Downloading a model</h3>
+        <p>Overflow menu → <strong>Download</strong>. Downloads the current XML as a <code>.bpmn</code> or <code>.dmn</code> file. The filename is derived from the process/decision name converted to kebab-case.</p>
+
+        <h3>Deleting a model</h3>
+        <p>Overflow menu → <strong>Delete Model</strong> (model owner or project owner). Confirmation required. Deletes the model metadata, XML data, and all milestones.</p>
+
+        <h3>Bulk actions</h3>
+        <p>Select models using the checkboxes (only BPMN and DMN rows are selectable; folders cannot be selected). A batch actions bar appears:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Action</th><th>Who can use it</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Download</strong></td><td>Any member</td></tr>
+            <tr><td><strong>Duplicate</strong></td><td>Any member</td></tr>
+            <tr><td><strong>Delete</strong></td><td>Project owner only</td></tr>
+            <tr><td><strong>Move to...</strong></td><td>Project owner only</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>5. The editor</h2>
+
+        <h3>BPMN editor</h3>
+        <p>Powered by <code>bpmn-js</code>. Features: drag-and-drop BPMN 2.0 elements, colour picker, minimap, zoom/pan, and standard keyboard shortcuts (undo, redo, copy/paste, delete).</p>
+
+        <h3>DMN editor</h3>
+        <p>Powered by <code>dmn-js</code>. Supports two views: <strong>DRD view</strong> (Decision Requirements Diagram) and <strong>Decision Table view</strong>. Switching views triggers an XML export so changes are not lost.</p>
+
+        <h3>Saving</h3>
+        <p>The <strong>Save</strong> button appears in the toolbar when there are unsaved changes. <strong>Auto-save</strong> (BPMN only) — toggle the Auto-save switch in the toolbar. When on, every diagram change is saved automatically. The auto-save preference is persisted to <code>localStorage</code>.</p>
+
+        <h3>Downloading from the editor</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Button</th><th>What it downloads</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Download BPMN</strong> icon</td><td><code>.bpmn</code> XML file (BPMN only)</td></tr>
+            <tr><td><strong>Download as image</strong> icon</td><td><code>.png</code> at 1.5× resolution, rendered via SVG export (BPMN only)</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Unsaved-changes guard</h3>
+        <p>Any navigation action (breadcrumb, sidebar item) while there are unsaved changes opens a <strong>Save or Discard</strong> dialog. Navigation is blocked until the user chooses.</p>
+
+        <h3>Resizable panels</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Panel</th><th>localStorage key</th><th>Default</th><th>Min/max</th></tr></thead>
+          <tbody>
+            <tr><td>Project sidebar (left)</td><td><code>sidePanelWidth</code></td><td>250 px</td><td>150 – 800 px</td></tr>
+            <tr><td>Comments panel (right)</td><td><code>commentsPanelWidth</code></td><td>300 px</td><td>200 – 800 px</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>6. Project sidebar (in editor)</h2>
+        <p>The left sidebar shows the contents of the current project while you are in the editor. Toggle it with the panel icon in the toolbar.</p>
+        <p>Contents (in order): <code>..</code> (navigate up, only when inside a folder), then folders at the current level (bold, alphabetical), then models at the current level (alphabetical, filtered to the current folder).</p>
+        <p>Click a sidebar item to navigate. If you have unsaved changes, a warning toast blocks navigation and you must save first. DMN model items show a <code>not-allowed</code> cursor and do not navigate. The sidebar's open/closed state is persisted to <code>localStorage</code> (<code>isProjectViewerOpen</code>).</p>
+      </section>
+
+      <section>
+        <h2>7. Milestones (version history)</h2>
+        <p>Each model has its own milestone list — named snapshots of the XML at a point in time. Open the list with the <strong>Milestones</strong> button in the editor toolbar. Milestones are displayed in a paginated table (10 per page), sorted newest-first.</p>
+
+        <h3>Saving a milestone</h3>
+        <p>Enter a name and optional description, then click <strong>Save Milestone</strong>. The current XML is stored with a <code>createdAt</code> timestamp and your user ID.</p>
+
+        <h3>Loading a milestone</h3>
+        <p>Click <strong>Load</strong> on any milestone row. A confirmation sub-view appears with a toggle (default: on) labelled "Save current state as milestone before loading". If left on, the current model XML is automatically saved as a new milestone named <code>State before loading '{milestone name}'</code> before the selected version is loaded.</p>
+
+        <h3>Deleting a milestone</h3>
+        <p>Click <strong>Delete</strong> on a milestone row. Confirmation required. Deletion is permanent.</p>
+      </section>
+
+      <section>
+        <h2>8. Comments</h2>
+        <p>The comments panel is accessible via the chat icon in the editor toolbar. It can be opened and closed independently of the project sidebar.</p>
+
+        <h3>Adding a comment</h3>
+        <p>Click <strong>Add Comment</strong> in the panel header. A modal opens with a text area. Comments are stored with your display name, user ID, and a timestamp.</p>
+
+        <h3>Viewing comments</h3>
+        <p>Comments are listed newest-first with the author name and a formatted timestamp (<code>YYYY-MM-DD HH:MM</code>).</p>
+
+        <h3>Deleting a comment</h3>
+        <p>The trash icon appears only on your own comments. Click it to delete — no confirmation dialog, deletion is immediate.</p>
+      </section>
+
+      <section>
+        <h2>9. Team collaboration</h2>
+
+        <h3>Inviting a member</h3>
+        <p>In the project view, open the <strong>Members</strong> panel (group icon) and click <strong>Invite</strong>. Enter the invitee's email address (Google or Microsoft account). Before sending, two checks run against the database:</p>
+        <ol>
+          <li>Is there already a <code>Pending</code> invitation for this email + project? → blocked with a warning.</li>
+          <li>Is this email already a member of the project? → blocked with a warning.</li>
+        </ol>
+        <p>The email is normalised to lower-case before storage.</p>
+
+        <h3>Member roles</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Role</th><th>How assigned</th><th>Permissions</th></tr></thead>
+          <tbody>
+            <tr><td><code>owner</code></td><td>Automatically on project creation</td><td>Can rename/delete the project, remove members, and perform all model operations</td></tr>
+            <tr><td><code>editor</code></td><td>Assigned when an invitation is accepted</td><td>Can create, rename, duplicate, download, and delete their own models</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Removing a member</h3>
+        <p>In the Members panel, open the overflow menu on a member row → <strong>Remove member</strong> (project owner only, for other members). Confirmation required.</p>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+flowchart TD
+    A["Not signed in\nWelcome screen"] --> B["Sign in\n(Google or Microsoft)"]
+    B --> C["ALL_PROJECTS\nYour Projects + Shared with me"]
+    C --> D["PROJECT view\nModels • Folders • Members"]
+    D --> E["BPMN editor\nbpmn-js canvas"]
+    D --> F["DMN editor\ndmn-js canvas"]
+    E --> G["Milestones modal"]
+    E --> H["Comments panel"]
+    E --> I["Share modal"]
+    D --> J["Invite modal"]
+    C --> K["Pending invitations banner\nAccept / Decline"]
+    E --> L["Save / discard guard\n(on navigation)"]
+    F --> L
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>App shell &amp; routing</h3>
+        <ul><li><code>src/App.tsx</code></li></ul>
+        <h3>Project, folder &amp; model management</h3>
+        <ul>
+          <li><code>src/components/ProjectList.tsx</code></li>
+          <li><code>src/services/projects.service.tsx</code></li>
+          <li><code>src/services/models.service.tsx</code></li>
+        </ul>
+        <h3>Authentication &amp; user record</h3>
+        <ul><li><code>src/services/user.service.tsx</code></li></ul>
+        <h3>Editor wrappers</h3>
+        <ul>
+          <li><code>src/components/BpmnModeler.tsx</code></li>
+          <li><code>src/components/DmnModeler.tsx</code></li>
+        </ul>
+        <h3>Modals</h3>
+        <ul>
+          <li><code>src/components/AddProjectModal.tsx</code></li>
+          <li><code>src/components/RenameProjectModal.tsx</code></li>
+          <li><code>src/components/AddBPMNModelModal.tsx</code></li>
+          <li><code>src/components/RenameModelModal.tsx</code></li>
+          <li><code>src/components/AddFolderModal.tsx</code></li>
+          <li><code>src/components/RenameFolderModal.tsx</code></li>
+          <li><code>src/components/MoveModelModal.tsx</code></li>
+          <li><code>src/components/InviteModal.tsx</code></li>
+          <li><code>src/components/MilestonesModal.tsx</code></li>
+          <li><code>src/components/AddCommentModal.tsx</code></li>
+          <li><code>src/components/ConfirmationModal.tsx</code></li>
+          <li><code>src/components/SaveModal.tsx</code></li>
+          <li><code>src/components/LogoutModal.tsx</code></li>
+          <li><code>src/components/ShareModal.tsx</code></li>
+        </ul>
+        <h3>Utilities</h3>
+        <ul><li><code>src/services/utils.service.tsx</code></li></ul>
+        <h3>Configuration</h3>
+        <ul><li><code>src/config/config.js</code></li></ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Services — Data Dictionary</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">Services</span>
+    <a class="md-link" href="../services.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">Data Dictionary</p>
+      <h1>Services</h1>
+      <p class="lede">The <code>src/services/</code> directory contains every function that communicates with Firebase Realtime Database, Firebase Authentication, and the Microsoft Graph API, plus a set of pure browser-side helpers. React components import from these files rather than calling Firebase or browser APIs directly. Two files (<code>download.service.tsx</code>, <code>invites.service.tsx</code>) exist but are empty stubs with no exports.</p>
+
+      <section>
+        <h2>1. models.service.tsx</h2>
+        <p>CRUD operations for BPMN/DMN model metadata and XML data, milestones, and comments. All reads and writes use the Firebase Realtime Database SDK.</p>
+        <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
+
+        <h3>saveBPMNModel(model)</h3>
+        <p>Atomically writes model metadata and XML data in a single multi-path <code>update</code> call.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
+          <tbody>
+            <tr><td><code>/bpmnModels/{model.id}</code></td><td><code>name</code>, <code>type: 'bpmn'</code>, <code>ownerId</code>, <code>folder</code> (or <code>null</code>), <code>projectId</code>, <code>updatedAt</code></td></tr>
+            <tr><td><code>/modelXmlData/{model.id}/xmlData</code></td><td><code>model.xmlData</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Notes:</strong></p>
+        <ul>
+          <li><code>folder</code> is set to <code>model.folder || null</code> — a missing folder is stored as <code>null</code>, not omitted.</li>
+          <li><code>updatedAt</code> is set to <code>new Date().toISOString()</code> on every call. <code>createdAt</code> is not written on save; it is set only at creation time and preserved on subsequent saves.</li>
+          <li>Returns <code>Promise&lt;void&gt;</code>; logs success to the console.</li>
+        </ul>
+
+        <h3>saveDMNodel(model)</h3>
+        <p>Atomically writes DMN model metadata and XML data. <strong>Note:</strong> this function name contains a typo (<code>saveDMNodel</code>, not <code>saveDMNModel</code>).</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
+          <tbody>
+            <tr><td><code>/bpmnModels/{model.id}</code></td><td><code>name</code>, <code>type: 'dmn'</code>, <code>ownerId</code>, <code>projectId</code>, <code>updatedAt</code></td></tr>
+            <tr><td><code>/modelXmlData/{model.id}/xmlData</code></td><td><code>model.xmlData</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Notes:</strong></p>
+        <ul>
+          <li>Unlike <code>saveBPMNModel</code>, no <code>folder</code> field is written — DMN models do not track folder placement in this function.</li>
+          <li>Returns <code>Promise&lt;void&gt;</code>.</li>
+        </ul>
+
+        <h3>saveMilestone(modelId, name, description, xmlData, userId)</h3>
+        <p>Pushes a new milestone under <code>milestones/{modelId}</code> using <code>push</code> (Firebase auto-generated key).</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
+          <tbody>
+            <tr><td><code>milestones/{modelId}/{autoKey}</code></td><td><code>name</code>, <code>description</code>, <code>xmlData</code>, <code>createdBy: userId</code>, <code>createdAt</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Returns <code>Promise&lt;void&gt;</code>.</p>
+
+        <h3>getMilestones(modelId): Promise&lt;Milestone[]&gt;</h3>
+        <p>Reads the full <code>milestones/{modelId}</code> subtree in a single <code>get</code> call and returns items sorted <strong>newest-first</strong> by <code>createdAt</code>.</p>
+        <p><strong>Returned shape per item:</strong> <code>{ id: key, name, description, xmlData, createdBy, createdAt }</code></p>
+        <p>Returns <code>[]</code> if the path does not exist.</p>
+
+        <h3>deleteMilestone(modelId, milestoneId)</h3>
+        <p>Removes <code>milestones/{modelId}/{milestoneId}</code>. Returns <code>Promise&lt;void&gt;</code>.</p>
+
+        <h3>saveComment(modelId, text, user)</h3>
+        <p>Pushes a new comment under <code>comments/{modelId}</code> using <code>push</code>.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
+          <tbody>
+            <tr><td><code>comments/{modelId}/{autoKey}</code></td><td><code>text</code>, <code>createdBy: user.uid</code>, <code>creatorName: user.displayName || 'Unknown'</code>, <code>createdAt</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>Returns <code>Promise&lt;void&gt;</code>.</p>
+
+        <h3>getComments(modelId): Promise&lt;Comment[]&gt;</h3>
+        <p>Reads the full <code>comments/{modelId}</code> subtree and returns items sorted <strong>newest-first</strong> by <code>createdAt</code>.</p>
+        <p><strong>Returned shape per item:</strong> <code>{ id: key, text, createdBy, creatorName, createdAt }</code></p>
+        <p>Returns <code>[]</code> if the path does not exist.</p>
+
+        <h3>deleteComment(modelId, commentId)</h3>
+        <p>Removes <code>comments/{modelId}/{commentId}</code>. Returns <code>Promise&lt;void&gt;</code>.</p>
+      </section>
+
+      <section>
+        <h2>2. user.service.tsx</h2>
+        <p>Firebase Authentication sign-in flows and user record management in RTDB.</p>
+        <p><strong>Source:</strong> <code>src/services/user.service.tsx</code></p>
+
+        <h3>signInWithGoogle()</h3>
+        <p>Opens a Google OAuth pop-up (<code>signInWithPopup</code>). On success, upserts the user record at <code>users/{uid}</code>:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Condition</th><th>RTDB path</th><th>Fields written</th></tr></thead>
+          <tbody>
+            <tr><td>New user</td><td><code>users/{uid}</code></td><td><code>email</code>, <code>displayName</code>, <code>imageUrl: photoURL</code>, <code>createdAt</code></td></tr>
+            <tr><td>Existing user</td><td><code>users/{uid}</code></td><td>All previous fields (spread), plus updated <code>email</code>, <code>displayName</code>, <code>imageUrl: photoURL</code>, <code>lastLogin</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Cross-provider linking — <code>auth/account-exists-with-different-credential</code>:</strong></p>
+        <ol>
+          <li>Extracts the Google <code>pendingCred</code> from the error.</li>
+          <li>Opens a Microsoft sign-in pop-up.</li>
+          <li>On success, calls <code>linkWithCredential(microsoftResult.user, pendingCred)</code> to attach the Google credential to the existing Microsoft account.</li>
+        </ol>
+
+        <h3>signInWithMicrosoft()</h3>
+        <p>Opens a Microsoft OAuth pop-up (<code>OAuthProvider('microsoft.com')</code>). On success:</p>
+        <ol>
+          <li>Fetches the user avatar from the Microsoft Graph API:<br><code>GET https://graph.microsoft.com/v1.0/me/photo/$value</code> with <code>Authorization: Bearer {accessToken}</code>.</li>
+          <li>Encodes the <code>ArrayBuffer</code> response as <code>data:image/jpeg;base64,{base64}</code>.</li>
+          <li>Upserts <code>users/{uid}</code> with the same field set as <code>signInWithGoogle</code>, using the base64 avatar as <code>imageUrl</code>.</li>
+        </ol>
+        <p><strong>Cross-provider linking — <code>auth/account-exists-with-different-credential</code>:</strong></p>
+        <ol>
+          <li>Extracts the Microsoft <code>pendingCred</code>.</li>
+          <li>Opens a Google sign-in pop-up.</li>
+          <li>Calls <code>linkWithCredential(googleResult.user, pendingCred)</code> to attach the Microsoft credential to the existing Google account.</li>
+        </ol>
+
+        <h3>logout()</h3>
+        <p>Calls <code>signOut(auth)</code>. Returns <code>Promise&lt;void&gt;</code>.</p>
+      </section>
+
+      <section>
+        <h2>3. projects.service.tsx</h2>
+        <p>Cascade-delete helper invoked when a project is permanently deleted.</p>
+        <p><strong>Source:</strong> <code>src/services/projects.service.tsx</code></p>
+
+        <h3>deleteModelsAndInvites(projectId)</h3>
+        <p>Deletes all models, XML data, milestones, and invitations belonging to a project.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Step</th><th>RTDB query</th><th>Removals per matched key</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>bpmnModels</code> where <code>projectId == projectId</code></td><td><code>bpmnModels/{key}</code>, <code>modelXmlData/{key}</code>, <code>milestones/{key}</code></td></tr>
+            <tr><td>2</td><td><code>invitations</code> where <code>projectId == projectId</code></td><td><code>invitations/{key}</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Validation / edge cases:</strong></p>
+        <ul>
+          <li><code>comments/{key}</code> is <strong>not</strong> removed — comments are not cleaned up on project deletion.</li>
+          <li>Individual <code>remove</code> calls inside the <code>forEach</code> are fire-and-forget (no <code>await</code>); the returned promise resolves when the queries complete, not when all removes do.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. utils.service.tsx</h2>
+        <p>Pure functions and browser-API helpers used across components. No Firebase calls.</p>
+        <p><strong>Source:</strong> <code>src/services/utils.service.tsx</code></p>
+
+        <h3>extractBpmnProcessName(xmlString: string): string | null</h3>
+        <p>Parses <code>xmlString</code> as XML and returns the <code>name</code> attribute of the first <code>bpmn:process</code> element. Returns <code>null</code> if no such element is found.</p>
+
+        <h3>extractDmnTableName(xmlString: string): string | null</h3>
+        <p>Parses <code>xmlString</code> as XML and returns the <code>name</code> attribute of the first <code>decision</code> element. Returns <code>null</code> if not found.</p>
+
+        <h3>camelize(str): string</h3>
+        <p>Converts a string to camelCase. Lowercases the first word; uppercases the first letter of every subsequent word; removes all whitespace.</p>
+        <p><strong>Example:</strong> <code>"my process name"</code> → <code>"myProcessName"</code></p>
+
+        <h3>toKebabCase(str): string</h3>
+        <p>Converts a string to kebab-case. Lowercases everything; collapses whitespace and underscores to hyphens; strips characters that are not <code>a–z</code>, <code>0–9</code>, or <code>-</code>.</p>
+        <p><strong>Example:</strong> <code>"My Process Name"</code> → <code>"my-process-name"</code></p>
+
+        <h3>convertDateString(inputDateString: string): string</h3>
+        <p>Converts an ISO 8601 timestamp to a <code>YYYY-MM-DD HH:MM</code> display string by splitting on <code>T</code> and <code>:</code> and discarding seconds and timezone.</p>
+        <p><strong>Example:</strong> <code>"2024-01-15T09:30:45.000Z"</code> → <code>"2024-01-15 09:30"</code></p>
+
+        <h3>renderMembersCell(members): JSX.Element</h3>
+        <p>Renders member avatars for the project-list table. Shows up to 4 circular <code>&lt;img&gt;</code> elements (30×30 px). If the member count exceeds 4, appends <code>+{extraCount}</code> as a text node. Each avatar has a <code>title</code> tooltip of <code>"{displayName} ({role})"</code>.</p>
+
+        <h3>sortRows(rows, header, direction): array</h3>
+        <p>Sorts <code>rows</code> <strong>in-place</strong> by the <code>header</code> field and returns the same array.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th><code>direction</code> value</th><th>Effective sort</th></tr></thead>
+          <tbody>
+            <tr><td><code>'NONE'</code></td><td>No sort — all comparisons return <code>0</code>.</td></tr>
+            <tr><td><code>'DESC'</code></td><td>Ascending by <code>rows[n][header]</code> (naming is inverted relative to convention).</td></tr>
+            <tr><td>Any other value</td><td>Descending by <code>rows[n][header]</code> (implied <code>'ASC'</code>).</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Note:</strong> The sort direction labels are inverted. The value <code>'DESC'</code> produces ascending order; the absence of <code>'DESC'</code> or <code>'NONE'</code> produces descending order.</p>
+
+        <h3>downloadXmlAsBpmn(model): void</h3>
+        <p>Triggers a file download in the browser.</p>
+        <ol>
+          <li>Creates a <code>Blob</code> from <code>model.xmlData</code> with MIME type <code>text/xml</code>.</li>
+          <li>Derives the filename:
+            <ul>
+              <li>BPMN: <code>toKebabCase(extractBpmnProcessName(xmlData) ?? model.name) + '.bpmn'</code></li>
+              <li>DMN: <code>toKebabCase(extractDmnTableName(xmlData) ?? model.name) + '.dmn'</code></li>
+            </ul>
+          </li>
+          <li>Creates a temporary <code>&lt;a&gt;</code>, appends it to the DOM (required for Firefox), calls <code>.click()</code>, then removes it.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>5. Empty stubs</h2>
+        <p>Two service files in <code>src/services/</code> contain no code:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>File</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td><code>src/services/download.service.tsx</code></td><td>Empty — no exports</td></tr>
+            <tr><td><code>src/services/invites.service.tsx</code></td><td>Empty — no exports</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+flowchart TD
+    A[React Components] --> B[models.service.tsx]
+    A --> C[user.service.tsx]
+    A --> D[projects.service.tsx]
+    A --> E[utils.service.tsx]
+
+    B -->|RTDB update| F["/bpmnModels/{id}\n/modelXmlData/{id}"]
+    B -->|RTDB push/get/remove| G["milestones/{modelId}"]
+    B -->|RTDB push/get/remove| H["comments/{modelId}"]
+
+    C -->|RTDB set/get| I["users/{uid}"]
+    C -->|Firebase Auth popup| J[Google OAuth]
+    C -->|Firebase Auth popup| K[Microsoft OAuth]
+    K -->|HTTP GET| L["graph.microsoft.com\n/me/photo/$value"]
+    J -.->|cross-link| K
+    K -.->|cross-link| J
+
+    D -->|RTDB query + remove| M["bpmnModels\nmodelXmlData\nmilestones\ninvitations"]
+
+    E -->|Browser Blob + a| N[File download]
+    E --> O["camelize / toKebabCase\nconvertDateString / sortRows"]
+    E --> P["DOMParser\nextractBpmnProcessName\nextractDmnTableName"]
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>Services</h3>
+        <ul>
+          <li><code>src/services/models.service.tsx</code></li>
+          <li><code>src/services/user.service.tsx</code></li>
+          <li><code>src/services/projects.service.tsx</code></li>
+          <li><code>src/services/utils.service.tsx</code></li>
+          <li><code>src/services/download.service.tsx</code></li>
+          <li><code>src/services/invites.service.tsx</code></li>
+        </ul>
+        <h3>Configuration</h3>
+        <ul>
+          <li><code>src/config/.firebase.js</code></li>
+        </ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

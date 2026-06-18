@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Config — Data Dictionary</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">Config</span>
+    <a class="md-link" href="../config.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">Data Dictionary</p>
+      <h1>Config</h1>
+      <p class="lede">The <code>src/config/</code> directory holds two runtime configuration files consumed by the React frontend and the Cloud Functions build scripts. A third project-root file, <code>firebase.json</code>, drives the Firebase CLI for deployments and the local emulator. Application code imports only from <code>src/config/</code> — nothing reads from <code>firebase.json</code> at runtime.</p>
+
+      <section>
+        <h2>1. Application config</h2>
+        <p>A single exported object in <code>src/config/config.js</code> that controls feature flags and the application version string. It is a plain JS object with no external dependencies.</p>
+        <p><strong>Source:</strong> <code>src/config/config.js</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>bpmnModelerVersion</code></td><td><code>string</code></td><td><code>"0.5.1"</code></td><td>Human-readable application version, displayed in the UI header.</td></tr>
+            <tr><td><code>enableGoogleSignIn</code></td><td><code>boolean</code></td><td><code>true</code></td><td>When <code>true</code>, the "Sign in with Google" button is rendered in the sign-in view.</td></tr>
+            <tr><td><code>enableMicrosoftSignIn</code></td><td><code>boolean</code></td><td><code>true</code></td><td>When <code>true</code>, the "Sign in with Microsoft" button is rendered in the sign-in view.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li>All three fields have no runtime validation — they are read directly wherever needed.</li>
+          <li>Setting both <code>enableGoogleSignIn</code> and <code>enableMicrosoftSignIn</code> to <code>false</code> results in no sign-in options being shown.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. Firebase config</h2>
+        <p><code>src/config/.firebase.js</code> initialises the Firebase application and exports the auth primitives used throughout <code>src/services/</code>. The file is <strong>gitignored</strong> (it may contain API keys). A placeholder template is committed as <code>src/config/.example.firebase.js</code> — copy it to <code>.firebase.js</code> and fill in real values before running or deploying.</p>
+        <p><strong>Source:</strong> <code>src/config/.example.firebase.js</code> (template), <code>src/config/.firebase.js</code> (gitignored, actual)</p>
+
+        <h3>firebaseConfig shape</h3>
+        <p>The <code>firebaseConfig</code> object is passed to <code>initializeApp()</code>. All fields are strings.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Description</th><th>Example (from template)</th></tr></thead>
+          <tbody>
+            <tr><td><code>apiKey</code></td><td>Firebase Web API key.</td><td><code>""</code></td></tr>
+            <tr><td><code>authDomain</code></td><td>Firebase Auth domain.</td><td><code>""</code> (typically <code>{projectId}.firebaseapp.com</code>)</td></tr>
+            <tr><td><code>databaseURL</code></td><td>Firebase Realtime Database base URL. Used by the RTDB SDK and read by the Cloud Functions build scripts via <code>functions/scripts/read-firebase-config.js</code>.</td><td><code>""</code> (europe-west1 region in the live config)</td></tr>
+            <tr><td><code>projectId</code></td><td>GCP / Firebase project ID. Used by the Cloud Functions deploy script.</td><td><code>""</code></td></tr>
+            <tr><td><code>storageBucket</code></td><td>Firebase Storage bucket. Present in the config but <strong>not currently used</strong> by the application.</td><td><code>""</code></td></tr>
+            <tr><td><code>messagingSenderId</code></td><td>Firebase Cloud Messaging sender ID. Present in the config but not used at runtime.</td><td><code>""</code></td></tr>
+            <tr><td><code>appId</code></td><td>Firebase Web App ID.</td><td><code>""</code></td></tr>
+            <tr><td><code>measurementId</code></td><td>Google Analytics measurement ID. Present in config but not explicitly used in app code.</td><td><code>""</code></td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Exports</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Export</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>auth</code></td><td><code>Auth</code></td><td>Firebase Auth instance created from the initialised app. Imported by <code>user.service.tsx</code>.</td></tr>
+            <tr><td><code>GoogleAuthProvider</code></td><td>class</td><td>Re-exported from <code>firebase/auth</code>. Used in <code>user.service.tsx</code> for Google OAuth.</td></tr>
+            <tr><td><code>microsoftProvider</code></td><td><code>OAuthProvider</code></td><td><code>new OAuthProvider('microsoft.com')</code>. Used in <code>user.service.tsx</code> for Microsoft OAuth.</td></tr>
+            <tr><td><code>signInWithPopup</code></td><td>function</td><td>Re-exported from <code>firebase/auth</code>. Imported in <code>user.service.tsx</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li>No runtime validation of config values — a missing <code>databaseURL</code> will cause all RTDB operations to fail silently or throw at the SDK level.</li>
+          <li>The template enforces the shape; all fields must be non-empty strings in a production deployment.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. Firebase project config (firebase.json)</h2>
+        <p><code>firebase.json</code> is read exclusively by the Firebase CLI (<code>firebase deploy</code>, <code>firebase emulators:start</code>). It is not imported by application code.</p>
+        <p><strong>Source:</strong> <code>firebase.json</code></p>
+
+        <h3>functions</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>source</code></td><td><code>"functions"</code></td><td>Directory containing the Cloud Functions package.</td></tr>
+            <tr><td><code>predeploy</code></td><td><code>["npm --prefix functions install", "npm --prefix functions run build"]</code></td><td>Steps run before every function deploy: install dependencies, then compile TypeScript → <code>lib/</code>.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>hosting</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>public</code></td><td><code>"dist"</code></td><td>Directory served by Firebase Hosting (Vite build output).</td></tr>
+            <tr><td><code>ignore</code></td><td><code>["firebase.json", "**/.*", "**/node_modules/**"]</code></td><td>Files excluded from the hosting upload.</td></tr>
+            <tr><td><code>rewrites</code></td><td><code>[{ source: "**", destination: "/index.html" }]</code></td><td>Catch-all SPA rewrite — all paths serve <code>index.html</code> so client-side routing works.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>emulators</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Emulator</th><th>Port</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>functions</code></td><td>5001</td><td>Local Firebase Functions emulator.</td></tr>
+            <tr><td><code>pubsub</code></td><td>8085</td><td>Local Pub/Sub emulator (used to trigger billing-guard functions in development).</td></tr>
+            <tr><td><code>ui</code></td><td>4000</td><td>Firebase Emulator UI dashboard.</td></tr>
+            <tr><td><code>singleProjectMode</code></td><td><code>true</code></td><td>Emulators operate as a single project, enabling cross-emulator calls.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>4. Build config (vite.config.ts)</h2>
+        <p><code>vite.config.ts</code> contains the Vite build configuration for the frontend. It is minimal — only the React plugin is registered. No aliases, proxy rules, or environment-variable transforms are configured.</p>
+        <p><strong>Source:</strong> <code>vite.config.ts</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Setting</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>plugins</code></td><td><code>[react()]</code></td><td><code>@vitejs/plugin-react</code> — enables JSX transform and React Fast Refresh in development.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+flowchart TD
+    A["src/config/config.js\nbpmnModelerVersion\nenableGoogleSignIn\nenableMicrosoftSignIn"] --> B["App.tsx / header\nconditional sign-in buttons"]
+
+    C["src/config/.example.firebase.js\n(template, committed)"]
+    D["src/config/.firebase.js\n(gitignored, fill from example)"]
+    C -.->|"copy & fill"| D
+
+    D --> E["user.service.tsx\nauth, GoogleAuthProvider,\nmicrosoftProvider, signInWithPopup"]
+    D --> F["models.service.tsx\ngetDatabase()"]
+    D --> G["projects.service.tsx\ngetDatabase()"]
+    D --> H["functions/scripts/read-firebase-config.js\nextracts databaseURL → DATABASE_URL\nextracts projectId → GCLOUD_PROJECT"]
+
+    I["firebase.json\n(Firebase CLI only)"] --> J["firebase deploy\n(Functions + Hosting)"]
+    I --> K["firebase emulators:start\nfunctions :5001 / pubsub :8085 / UI :4000"]
+
+    L["vite.config.ts\n(Vite build tool)"] --> M["npm run build\n→ dist/"]
+    M --> J
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>Config files</h3>
+        <ul>
+          <li><code>src/config/config.js</code></li>
+          <li><code>src/config/.example.firebase.js</code></li>
+          <li><code>src/config/.firebase.js</code></li>
+        </ul>
+        <h3>Firebase project &amp; build</h3>
+        <ul>
+          <li><code>firebase.json</code></li>
+          <li><code>vite.config.ts</code></li>
+        </ul>
+        <h3>Consumers</h3>
+        <ul>
+          <li><code>src/services/user.service.tsx</code></li>
+          <li><code>src/services/models.service.tsx</code></li>
+          <li><code>src/services/projects.service.tsx</code></li>
+          <li><code>functions/scripts/read-firebase-config.js</code></li>
+        </ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
