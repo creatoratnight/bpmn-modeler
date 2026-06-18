@@ -1,0 +1,99 @@
+---
+name: update-docs
+description: "Compare the docs in DOCS_DIR/ with the current code and update the ones whose source changed."
+user_invocable: true
+model: sonnet
+---
+
+# Update Documentation
+
+Compare the documents in `docs/` with the current code and update the ones that have fallen
+behind. This is the skill the Stop hook runs automatically.
+
+> Fill in `docs` and `*.ts, *.tsx, *.js` before first use. Language is **English**.
+
+## Scope: diff-driven (default)
+
+Work **incrementally from the git diff**, not by scanning everything. This keeps it fast enough to
+run on every change.
+
+1. Find the changed files:
+   - `BASE=$(git merge-base origin/main HEAD)` (fall back to `origin/master`).
+   - Changed files = `git diff --name-only "$BASE"...HEAD` + uncommitted
+     (`git diff --name-only` and `git diff --cached --name-only`).
+2. Keep only **source files** (`*.ts, *.tsx, *.js`, e.g. `*.ts`, `*.kt`, `*.py`, `*.sql`). Ignore
+   `docs/` itself.
+3. Map each changed source file to the affected document, two ways:
+   - **Primarily** via a name token in the path (a path containing `payments` → `payments.md`).
+   - **As a fallback** via each doc's **"Related code"** section.
+4. **Only touch the documents found this way.** Leave the rest alone.
+
+If nothing source-related changed: report that everything is up to date and stop.
+
+### Full mode (explicit)
+
+Only when asked (`/update-docs --full`), or when no docs exist yet: go through every
+`docs/*.md` (skip `README.md` and `CHANGELOG.md`) using each doc's "Related code" section as
+the source list. If no docs exist yet, point to `/generate-docs`.
+
+## Step 1 — Inventory the changes
+
+For each affected document: read the doc, read its source files (via "Related code"), and note
+**new fields**, **removed fields**, **type changes**, **validation changes**, **new entities**,
+**removed entities**, **behaviour changes**.
+
+## Step 2 — Report findings
+
+```
+## payments.md
+⚠️ 2 changes:
+- NEW FIELD: Payment.refundedAt (timestamp) — undocumented
+- CHANGED TYPE: Payment.amount was Int, now Decimal
+
+## customers.md
+✅ Up to date
+```
+
+If everything is up to date, say so and stop.
+
+## Step 3 — Update the docs automatically
+
+If there are changes:
+
+1. Edit the documents **directly**, in the same style and structure. **Do NOT ask for
+   confirmation** — the changes are reviewed in the pull request.
+2. **Mirror the change into the HTML twin** at `docs/html/<area>.html` so the stakeholder
+   view stays in sync. Apply the same edit (add/remove a table `<tr>`, edit a cell, add a section,
+   update a `<pre class="mermaid">`), following the Markdown→HTML mapping in `/generate-docs`
+   Step 5. If the HTML twin doesn't exist yet, generate it per that step. Don't touch the script
+   tags or `assets/`.
+3. Update `docs/README.md` (and add a card to `docs/html/index.html`) if documents
+   were added.
+4. Briefly report what you changed.
+
+> **Verify before you remove.** A field removed in one file may still exist in a related one. Read
+> all sources in the doc's "Related code" section before deleting anything; only remove what no
+> longer appears in **any** source.
+
+## Step 4 — Update the changelog
+
+Append the changes to `docs/CHANGELOG.md`, newest first:
+
+```markdown
+## YYYY-MM-DD
+
+### payments.md
+- **New field:** `Payment.refundedAt` (`timestamp`) — when the payment was refunded
+- **Changed type:** `Payment.amount`: `Int` → `Decimal`
+```
+
+Group by date (today) and document; add new entries at the **top**; use the current date. Create
+the file with a header if it doesn't exist. If there are no changes, add nothing.
+
+## Guidelines
+
+- Write in **English**, consistent with the existing docs.
+- **Diagrams: Mermaid only, never ASCII.**
+- Keep the existing table structure and formatting per document.
+- Add nothing that can't be derived from the code; no fast-aging detail (line numbers).
+- Use relative paths in source references.
