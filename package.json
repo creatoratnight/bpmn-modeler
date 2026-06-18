@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:e2e": "vite --mode e2e --port 5174 --strictPort",
+    "emulators": "firebase emulators:start --only auth,database --project demo-bpmn",
+    "test:e2e": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test\"",
+    "test:e2e:ui": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --ui\"",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@carbon/react": "^1.53.1",
@@ -28,6 +33,7 @@
     "toastr": "^2.1.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@typescript-eslint/eslint-plugin": "^6.21.0",

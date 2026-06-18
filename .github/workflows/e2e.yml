@@ -1,0 +1,82 @@
+name: E2E Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    name: Playwright (emulators)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node 22 matches .nvmrc and satisfies the Firebase CLI (needs >= 20).
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Firebase Auth & Database emulators run on the JVM.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      # --with-deps installs the Linux system libraries Chromium needs on CI.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # src/config/.firebase.js is gitignored. The emulators run in demo mode
+      # (project demo-bpmn), so dummy values are enough — no real keys needed.
+      # Keep this in sync with src/config/.example.firebase.js.
+      - name: Generate Firebase config (emulator demo values)
+        run: |
+          cat > src/config/.firebase.js <<'EOF'
+          import { initializeApp } from 'firebase/app';
+          import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+          import { getDatabase, ref, set, child, get, connectDatabaseEmulator } from 'firebase/database';
+
+          const firebaseConfig = {
+              apiKey: "demo-api-key",
+              authDomain: "demo-bpmn.firebaseapp.com",
+              databaseURL: "https://demo-bpmn-default-rtdb.firebaseio.com",
+              projectId: "demo-bpmn",
+              storageBucket: "demo-bpmn.appspot.com",
+              messagingSenderId: "000000000000",
+              appId: "1:000000000000:web:0000000000000000000000",
+              measurementId: "G-0000000000"
+          };
+
+          const app = initializeApp(firebaseConfig);
+
+          const auth = getAuth(app);
+          const microsoftProvider = new OAuthProvider('microsoft.com');
+
+          if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
+              connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+              connectDatabaseEmulator(getDatabase(app), '127.0.0.1', 9000);
+              window.__E2E_AUTH__ = { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword };
+          }
+
+          export { auth, GoogleAuthProvider, microsoftProvider, signInWithPopup };
+          EOF
+
+      - name: Run e2e tests
+        run: npm run test:e2e
+
+      # Publish the HTML report so failures can be inspected from the run page.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

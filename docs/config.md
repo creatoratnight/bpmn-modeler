@@ -58,6 +58,18 @@ The `firebaseConfig` object is passed to `initializeApp()`. All fields are strin
 - No runtime validation of config values — a missing `databaseURL` will cause all RTDB operations to fail silently or throw at the SDK level.
 - The template enforces the shape; all fields must be non-empty strings in a production deployment.
 
+### End-to-end test mode (emulators)
+
+When the app is started with `VITE_FIREBASE_EMULATOR=true` (set by `vite --mode e2e` via `.env.e2e`), the config file points the SDK at the local Firebase emulators and exposes a test hook. The block is guarded so it is stripped from production builds.
+
+| Action | Detail |
+|--------|--------|
+| `connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })` | Routes all Firebase Auth calls to the local Auth emulator. |
+| `connectDatabaseEmulator(getDatabase(app), '127.0.0.1', 9000)` | Routes all RTDB calls to the local Database emulator. |
+| `window.__E2E_AUTH__ = { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword }` | Test-only hook used by the Playwright fixture (`e2e/fixtures.ts`) to sign in without the OAuth popup. |
+
+The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signInWithEmailAndPassword`, `createUserWithEmailAndPassword`) and `firebase/database` (`connectDatabaseEmulator`). It is present in both `.example.firebase.js` (committed) and `.firebase.js` (gitignored, actual).
+
 ---
 
 ## 3. Firebase project config (firebase.json)
@@ -85,10 +97,14 @@ The `firebaseConfig` object is passed to `initializeApp()`. All fields are strin
 
 | Emulator | Port | Description |
 |----------|------|-------------|
+| `auth` | `9099` | Local Firebase Auth emulator. Used by the end-to-end tests to sign in without real OAuth. |
+| `database` | `9000` | Local Realtime Database emulator. Used by the end-to-end tests; defaults to allow-all rules. |
 | `functions` | `5001` | Local Firebase Functions emulator. |
 | `pubsub` | `8085` | Local Pub/Sub emulator (used to trigger billing-guard functions in development). |
 | `ui` | `4000` | Firebase Emulator UI dashboard. |
 | `singleProjectMode` | `true` | Emulators operate as a single project, enabling cross-emulator calls. |
+
+> No deploy-level `database.rules` key is configured in `firebase.json` — RTDB security rules are managed in the Firebase console, and omitting the key keeps a bare `firebase deploy` from pushing rules to production. The Database emulator therefore defaults to allow-all rules, which is intentional for tests.
 
 ---
 
@@ -101,6 +117,55 @@ The `firebaseConfig` object is passed to `initializeApp()`. All fields are strin
 | Setting | Value | Description |
 |---------|-------|-------------|
 | `plugins` | `[react()]` | `@vitejs/plugin-react` — enables JSX transform and React Fast Refresh in development. |
+
+---
+
+## 5. End-to-end test config (playwright.config.ts)
+
+`playwright.config.ts` configures the Playwright end-to-end test runner. Tests live in `e2e/`. The config auto-starts the Vite dev server (in e2e mode) on a dedicated port before the suite; the Firebase emulators are started around the run by the `test:e2e` / `test:e2e:ui` scripts.
+
+**Source:** `playwright.config.ts`
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `testDir` | `'./e2e'` | Directory containing the `*.spec.ts` test files. |
+| `fullyParallel` | `true` | Runs tests across files in parallel. |
+| `forbidOnly` | `!!process.env.CI` | Fails the run if `test.only` is left in the source when running on CI. |
+| `retries` | `2` on CI, `0` locally | Retry count for failed tests. |
+| `workers` | `1` on CI, default locally | Parallel worker count. |
+| `reporter` | `'html'` | Generates an HTML report (opened via `npm run test:e2e:report`). |
+| `use.baseURL` | `'http://localhost:5174'` | Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal `npm run dev` on 5173. |
+| `use.trace` | `'on-first-retry'` | Captures a Playwright trace when a test is retried. |
+| `projects` | `[chromium]` | Browser projects; only Desktop Chrome is enabled by default (Firefox/WebKit are commented out). |
+| `webServer.command` | `'npm run dev:e2e'` | Command started before the suite (`vite --mode e2e`, loads `.env.e2e`). |
+| `webServer.url` | `'http://localhost:5174'` | URL polled until the dev server is ready. |
+| `webServer.reuseExistingServer` | `!process.env.CI` | Reuses an already-running dev server locally; always starts fresh on CI. |
+| `webServer.timeout` | `120000` | Milliseconds to wait for the dev server to boot. |
+
+**npm scripts (from `package.json`):**
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev:e2e` | `vite --mode e2e --port 5174 --strictPort` | Dev server in e2e mode on the dedicated port 5174; loads `.env.e2e` (`VITE_FIREBASE_EMULATOR=true`). |
+| `emulators` | `firebase emulators:start --only auth,database --project demo-bpmn` | Starts the Auth + Database emulators (for a manual two-terminal UI run). |
+| `test:e2e` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test"` | Boots the emulators, runs the suite headless, tears them down. |
+| `test:e2e:ui` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --ui"` | Interactive Playwright UI mode; boots the emulators automatically (no separate `npm run emulators` needed). |
+| `test:e2e:report` | `playwright show-report` | Opens the last HTML report. |
+
+**Authentication for tests:** the `demo-bpmn` project ID runs the emulators fully offline (no real credentials). The Playwright fixture `e2e/fixtures.ts` signs in via the `window.__E2E_AUTH__` hook (see §2) — creating a throwaway emulator user — so authenticated specs run as a logged-in user against an isolated, reset-each-run database. The pre-auth smoke tests (`e2e/sign-in.spec.ts`) need no sign-in.
+
+**Test coverage:**
+
+| Spec | What it covers |
+|------|----------------|
+| `e2e/sign-in.spec.ts` | Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render. |
+| `e2e/projects.spec.ts` | After sign-in: the "Your Projects" view and Add Project action render. |
+| `e2e/project-crud.spec.ts` | Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test uses a unique name (`uniqueName` in `e2e/fixtures.ts`) so tests stay independent on the shared emulator database. |
+
+**Notes:**
+- The dev server requires a valid `src/config/.firebase.js` to boot (Firebase is initialised at module load). In CI, generate it from `.example.firebase.js` with dummy values — the emulators run in demo mode and need no real keys.
+- The Firebase CLI requires Node.js ≥ 20 (the repo pins 22 in `.nvmrc`); the emulators require a JVM (Java) on the `PATH`.
+- Browser binaries are installed separately via `npx playwright install chromium`.
 
 ---
 
@@ -120,10 +185,17 @@ flowchart TD
     D --> H["functions/scripts/read-firebase-config.js\nextracts databaseURL → DATABASE_URL\nextracts projectId → GCLOUD_PROJECT"]
 
     I["firebase.json\n(Firebase CLI only)"] --> J["firebase deploy\n(Functions + Hosting)"]
-    I --> K["firebase emulators:start\nfunctions :5001 / pubsub :8085 / UI :4000"]
+    I --> K["firebase emulators\nauth :9099 / database :9000\nfunctions :5001 / pubsub :8085 / UI :4000"]
 
     L["vite.config.ts\n(Vite build tool)"] --> M["npm run build\n→ dist/"]
     M --> J
+
+    N["playwright.config.ts\n(E2E test runner)"] -->|"webServer: npm run dev:e2e"| O["Vite dev server :5174\n.env.e2e → VITE_FIREBASE_EMULATOR=true"]
+    O --> D
+    Q["npm run test:e2e\nfirebase emulators:exec"] --> K
+    Q --> N
+    O --> R["e2e/*.spec.ts + e2e/fixtures.ts"]
+    R -->|"window.__E2E_AUTH__"| K
 ```
 
 ---
@@ -138,6 +210,14 @@ flowchart TD
 ### Firebase project & build
 - `firebase.json`
 - `vite.config.ts`
+
+### Testing
+- `playwright.config.ts`
+- `.env.e2e`
+- `e2e/fixtures.ts`
+- `e2e/sign-in.spec.ts`
+- `e2e/projects.spec.ts`
+- `e2e/project-crud.spec.ts`
 
 ### Consumers
 - `src/services/user.service.tsx`

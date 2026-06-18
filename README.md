@@ -78,6 +78,46 @@ Live demo: https://bpmn.creatoratnight.com/
 2. Create, edit, and save BPMN and DMN models.
 3. Collaborate with others in real-time.
 
+### End-to-end tests (Playwright)
+
+End-to-end tests live in `e2e/` and run with [Playwright](https://playwright.dev/).
+Authenticated tests sign in against the **Firebase Auth & Database emulators** — no real
+Google/Microsoft account, no OAuth popup, and the real database is never touched.
+
+**Prerequisites:**
+
+- Node.js **≥ 20** (the Firebase CLI requires it — see `.nvmrc`, which pins 22). Run `nvm use`.
+- Java (JDK) on your `PATH` — the Auth/Database emulators run on the JVM.
+- Browser binaries, installed once: `npx playwright install chromium`.
+
+**Run the tests:**
+
+```sh
+npm run test:e2e          # boots the emulators, runs the suite, tears them down
+npm run test:e2e:report   # open the last HTML report
+```
+
+`test:e2e` wraps Playwright in `firebase emulators:exec`, so the emulators start and stop
+automatically. Playwright then starts the dev server in e2e mode (`vite --mode e2e`, which
+loads `.env.e2e` and sets `VITE_FIREBASE_EMULATOR=true`), pointing the Firebase SDK at the
+local emulators.
+
+For interactive UI mode, start the emulators in one terminal and Playwright in another:
+
+```sh
+npm run emulators         # terminal 1: Auth (9099) + Database (9000)
+npm run test:e2e:ui       # terminal 2
+```
+
+**How the login works:** in e2e mode, `src/config/.firebase.js` connects the SDK to the
+emulators and exposes a `window.__E2E_AUTH__` hook. The Playwright fixture in
+`e2e/fixtures.ts` uses it to create/sign-in a throwaway emulator user before each
+authenticated test. The emulator data is wiped on every run, so tests are deterministic.
+
+> The dev server still needs `src/config/.firebase.js` to exist to boot (see Firebase Setup).
+> In CI, generate it from `.example.firebase.js` with dummy values — the emulators run in
+> demo mode and need no real keys.
+
 ### Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
