@@ -136,7 +136,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `reporter` | `'html'` | Generates an HTML report (opened via `npm run test:e2e:report`). |
 | `use.baseURL` | `'http://localhost:5174'` | Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal `npm run dev` on 5173. |
 | `use.trace` | `'on-first-retry'` | Captures a Playwright trace when a test is retried. |
-| `projects` | `[chromium]` | Browser projects; only Desktop Chrome is enabled by default (Firefox/WebKit are commented out). |
+| `projects` | `[chromium, screenshots]` | `chromium` runs the `*.spec.ts` tests (Desktop Chrome; Firefox/WebKit commented out). `screenshots` runs only `*.shots.ts` at a 1440×900 viewport for documentation captures and is excluded from the normal test run. |
 | `webServer.command` | `'npm run dev:e2e'` | Command started before the suite (`vite --mode e2e`, loads `.env.e2e`). |
 | `webServer.url` | `'http://localhost:5174'` | URL polled until the dev server is ready. |
 | `webServer.reuseExistingServer` | `!process.env.CI` | Reuses an already-running dev server locally; always starts fresh on CI. |
@@ -148,9 +148,10 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 |--------|---------|-------------|
 | `dev:e2e` | `vite --mode e2e --port 5174 --strictPort` | Dev server in e2e mode on the dedicated port 5174; loads `.env.e2e` (`VITE_FIREBASE_EMULATOR=true`). |
 | `emulators` | `firebase emulators:start --only auth,database --project demo-bpmn` | Starts the Auth + Database emulators (for a manual two-terminal UI run). |
-| `test:e2e` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test"` | Boots the emulators, runs the suite headless, tears them down. |
-| `test:e2e:ui` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --ui"` | Interactive Playwright UI mode; boots the emulators automatically (no separate `npm run emulators` needed). |
+| `test:e2e` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium"` | Boots the emulators, runs the test suite headless (chromium project only — never the screenshot captures), tears them down. |
+| `test:e2e:ui` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium --ui"` | Interactive Playwright UI mode; boots the emulators automatically (no separate `npm run emulators` needed). |
 | `test:e2e:report` | `playwright show-report` | Opens the last HTML report. |
+| `screenshots` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"` | Captures documentation screenshots (the `screenshots` project) into `docs/assets/screenshots/`. Managed by the `capture-screenshots` skill. |
 
 **Authentication for tests:** the `demo-bpmn` project ID runs the emulators fully offline (no real credentials). The Playwright fixture `e2e/fixtures.ts` signs in via the `window.__E2E_AUTH__` hook (see §2) — creating a throwaway emulator user — so authenticated specs run as a logged-in user against an isolated, reset-each-run database. The pre-auth smoke tests (`e2e/sign-in.spec.ts`) need no sign-in.
 
@@ -161,6 +162,9 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `e2e/sign-in.spec.ts` | Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render. |
 | `e2e/projects.spec.ts` | After sign-in: the "Your Projects" view and Add Project action render. |
 | `e2e/project-crud.spec.ts` | Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test uses a unique name (`uniqueName` in `e2e/fixtures.ts`) so tests stay independent on the shared emulator database. |
+| `e2e/editor.spec.ts` | BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on `window.__E2E_BPMN__`), save it, and confirm the task persisted by reloading and re-reading the saved XML. |
+
+**Documentation screenshots:** the `screenshots` Playwright project (run via `npm run screenshots`) captures UI images into `docs/assets/screenshots/`. Shots are defined in `e2e/screenshots/manifest.ts` and captured serially by `e2e/screenshots/capture.shots.ts` (toasts hidden, fixed names for deterministic images). This is driven by the `capture-screenshots` skill; the images are committed and embedded in the Markdown docs and their HTML twins.
 
 **Notes:**
 - The dev server requires a valid `src/config/.firebase.js` to boot (Firebase is initialised at module load). In CI, generate it from `.example.firebase.js` with dummy values — the emulators run in demo mode and need no real keys.
@@ -218,6 +222,9 @@ flowchart TD
 - `e2e/sign-in.spec.ts`
 - `e2e/projects.spec.ts`
 - `e2e/project-crud.spec.ts`
+- `e2e/editor.spec.ts`
+- `e2e/screenshots/manifest.ts`
+- `e2e/screenshots/capture.shots.ts`
 
 ### Consumers
 - `src/services/user.service.tsx`

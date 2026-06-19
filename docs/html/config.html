@@ -153,7 +153,7 @@
             <tr><td><code>reporter</code></td><td><code>'html'</code></td><td>Generates an HTML report (opened via <code>npm run test:e2e:report</code>).</td></tr>
             <tr><td><code>use.baseURL</code></td><td><code>'http://localhost:5174'</code></td><td>Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal <code>npm run dev</code> on 5173.</td></tr>
             <tr><td><code>use.trace</code></td><td><code>'on-first-retry'</code></td><td>Captures a Playwright trace when a test is retried.</td></tr>
-            <tr><td><code>projects</code></td><td><code>[chromium]</code></td><td>Browser projects; only Desktop Chrome is enabled by default (Firefox/WebKit are commented out).</td></tr>
+            <tr><td><code>projects</code></td><td><code>[chromium, screenshots]</code></td><td><code>chromium</code> runs the <code>*.spec.ts</code> tests (Desktop Chrome; Firefox/WebKit commented out). <code>screenshots</code> runs only <code>*.shots.ts</code> at a 1440×900 viewport for documentation captures and is excluded from the normal test run.</td></tr>
             <tr><td><code>webServer.command</code></td><td><code>'npm run dev:e2e'</code></td><td>Command started before the suite (<code>vite --mode e2e</code>, loads <code>.env.e2e</code>).</td></tr>
             <tr><td><code>webServer.url</code></td><td><code>'http://localhost:5174'</code></td><td>URL polled until the dev server is ready.</td></tr>
             <tr><td><code>webServer.reuseExistingServer</code></td><td><code>!process.env.CI</code></td><td>Reuses an already-running dev server locally; always starts fresh on CI.</td></tr>
@@ -166,9 +166,10 @@
           <tbody>
             <tr><td><code>dev:e2e</code></td><td><code>vite --mode e2e --port 5174 --strictPort</code></td><td>Dev server in e2e mode on the dedicated port 5174; loads <code>.env.e2e</code> (<code>VITE_FIREBASE_EMULATOR=true</code>).</td></tr>
             <tr><td><code>emulators</code></td><td><code>firebase emulators:start --only auth,database --project demo-bpmn</code></td><td>Starts the Auth + Database emulators (for a manual two-terminal UI run).</td></tr>
-            <tr><td><code>test:e2e</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test"</code></td><td>Boots the emulators, runs the suite headless, tears them down.</td></tr>
-            <tr><td><code>test:e2e:ui</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --ui"</code></td><td>Interactive Playwright UI mode; boots the emulators automatically (no separate <code>npm run emulators</code> needed).</td></tr>
+            <tr><td><code>test:e2e</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium"</code></td><td>Boots the emulators, runs the test suite headless (chromium project only — never the screenshot captures), tears them down.</td></tr>
+            <tr><td><code>test:e2e:ui</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium --ui"</code></td><td>Interactive Playwright UI mode; boots the emulators automatically (no separate <code>npm run emulators</code> needed).</td></tr>
             <tr><td><code>test:e2e:report</code></td><td><code>playwright show-report</code></td><td>Opens the last HTML report.</td></tr>
+            <tr><td><code>screenshots</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"</code></td><td>Captures documentation screenshots (the <code>screenshots</code> project) into <code>docs/assets/screenshots/</code>. Managed by the <code>capture-screenshots</code> skill.</td></tr>
           </tbody>
         </table></div>
         <p><strong>Authentication for tests:</strong> the <code>demo-bpmn</code> project ID runs the emulators fully offline (no real credentials). The Playwright fixture <code>e2e/fixtures.ts</code> signs in via the <code>window.__E2E_AUTH__</code> hook (see §2) — creating a throwaway emulator user — so authenticated specs run as a logged-in user against an isolated, reset-each-run database. The pre-auth smoke tests (<code>e2e/sign-in.spec.ts</code>) need no sign-in.</p>
@@ -179,8 +180,10 @@
             <tr><td><code>e2e/sign-in.spec.ts</code></td><td>Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render.</td></tr>
             <tr><td><code>e2e/projects.spec.ts</code></td><td>After sign-in: the "Your Projects" view and Add Project action render.</td></tr>
             <tr><td><code>e2e/project-crud.spec.ts</code></td><td>Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test uses a unique name (<code>uniqueName</code> in <code>e2e/fixtures.ts</code>) so tests stay independent on the shared emulator database.</td></tr>
+            <tr><td><code>e2e/editor.spec.ts</code></td><td>BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on <code>window.__E2E_BPMN__</code>), save it, and confirm the task persisted by reloading and re-reading the saved XML.</td></tr>
           </tbody>
         </table></div>
+        <p><strong>Documentation screenshots:</strong> the <code>screenshots</code> Playwright project (run via <code>npm run screenshots</code>) captures UI images into <code>docs/assets/screenshots/</code>. Shots are defined in <code>e2e/screenshots/manifest.ts</code> and captured serially by <code>e2e/screenshots/capture.shots.ts</code> (toasts hidden, fixed names for deterministic images). This is driven by the <code>capture-screenshots</code> skill; the images are committed and embedded in the Markdown docs and their HTML twins.</p>
         <p><strong>Notes:</strong></p>
         <ul>
           <li>The dev server requires a valid <code>src/config/.firebase.js</code> to boot (Firebase is initialised at module load). In CI, generate it from <code>.example.firebase.js</code> with dummy values — the emulators run in demo mode and need no real keys.</li>
@@ -240,6 +243,9 @@ flowchart TD
           <li><code>e2e/sign-in.spec.ts</code></li>
           <li><code>e2e/projects.spec.ts</code></li>
           <li><code>e2e/project-crud.spec.ts</code></li>
+          <li><code>e2e/editor.spec.ts</code></li>
+          <li><code>e2e/screenshots/manifest.ts</code></li>
+          <li><code>e2e/screenshots/capture.shots.ts</code></li>
         </ul>
         <h3>Consumers</h3>
         <ul>

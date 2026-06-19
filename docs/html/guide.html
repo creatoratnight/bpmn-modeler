@@ -21,6 +21,8 @@
       <section>
         <h2>1. Getting started</h2>
 
+        <figure><img src="../assets/screenshots/sign-in.png" alt="BPMN Modeler sign-in screen with Google and Microsoft options"><figcaption>The sign-in screen with Google and Microsoft options.</figcaption></figure>
+
         <h3>Sign in</h3>
         <p>The sign-in buttons shown in the header are controlled by two feature flags in <code>src/config/config.js</code>:</p>
         <div class="table-wrap"><table>
@@ -56,8 +58,12 @@
         </table></div>
         <p>Each row shows the project name, number of models, last changed date, and member avatars (up to 4 avatars; overflow shown as <code>+N</code>). Columns are sortable — click any column header to sort ascending; click again for descending.</p>
 
+        <figure><img src="../assets/screenshots/projects-list.png" alt="The Your Projects list"><figcaption>The "Your Projects" list.</figcaption></figure>
+
         <h3>Creating a project</h3>
         <p>Click <strong>Add Project</strong>. Enter a name (must be non-empty) and confirm. The project is immediately created with you as the sole <code>owner</code> member.</p>
+
+        <figure><img src="../assets/screenshots/add-project-modal.png" alt="The Add Project dialog"><figcaption>The Add Project dialog.</figcaption></figure>
 
         <h3>Opening a project</h3>
         <p>Click any project row to navigate to the project view (<code>/project/{name}</code>).</p>
@@ -95,6 +101,8 @@
       <section>
         <h2>4. Models</h2>
 
+        <figure><img src="../assets/screenshots/project-view.png" alt="A project showing a folder and a model, with the toolbar to add models and folders"><figcaption>A project with a folder and a model, and the toolbar to add models and folders.</figcaption></figure>
+
         <h3>Model types</h3>
         <div class="table-wrap"><table>
           <thead><tr><th>Type</th><th>File format</th><th>Notes</th></tr></thead>
@@ -106,6 +114,8 @@
 
         <h3>Creating a model</h3>
         <p>Click <strong>Add BPMN</strong> or <strong>Add DMN</strong> in the toolbar. Enter a name — it must match <code>/^[a-zA-Z_][\w-.\s]*$/</code> (start with a letter or underscore; only letters, digits, <code>_</code>, <code>-</code>, <code>.</code>, and spaces allowed). A camelCase version of the name is used as the XML process/decision <code>id</code>.</p>
+
+        <figure><img src="../assets/screenshots/add-model-modal.png" alt="The Add model dialog"><figcaption>The Add model dialog.</figcaption></figure>
 
         <h3>Importing a model from file</h3>
         <p>Click <strong>Import</strong> to open the file picker. You may select multiple <code>.bpmn</code> and/or <code>.dmn</code> files at once. The model name is extracted from the XML (<code>bpmn:process name</code> or <code>decision name</code> attribute); if that attribute is absent the filename (minus extension) is used.</p>
@@ -143,6 +153,8 @@
 
       <section>
         <h2>5. The editor</h2>
+
+        <figure><img src="../assets/screenshots/bpmn-editor.png" alt="The BPMN editor with a simple diagram"><figcaption>The BPMN editor with a simple diagram.</figcaption></figure>
 
         <h3>BPMN editor</h3>
         <p>Powered by <code>bpmn-js</code>. Features: drag-and-drop BPMN 2.0 elements, colour picker, minimap, zoom/pan, and standard keyboard shortcuts (undo, redo, copy/paste, delete).</p>
@@ -186,6 +198,8 @@
         <h2>7. Milestones (version history)</h2>
         <p>Each model has its own milestone list — named snapshots of the XML at a point in time. Open the list with the <strong>Milestones</strong> button in the editor toolbar. Milestones are displayed in a paginated table (10 per page), sorted newest-first.</p>
 
+        <figure><img src="../assets/screenshots/milestones-modal.png" alt="The Milestones (version history) dialog"><figcaption>The Milestones (version history) dialog.</figcaption></figure>
+
         <h3>Saving a milestone</h3>
         <p>Enter a name and optional description, then click <strong>Save Milestone</strong>. The current XML is stored with a <code>createdAt</code> timestamp and your user ID.</p>
 
@@ -199,6 +213,8 @@
       <section>
         <h2>8. Comments</h2>
         <p>The comments panel is accessible via the chat icon in the editor toolbar. It can be opened and closed independently of the project sidebar.</p>
+
+        <figure><img src="../assets/screenshots/comments-panel.png" alt="The comments panel open in the editor"><figcaption>The comments panel open in the editor.</figcaption></figure>
 
         <h3>Adding a comment</h3>
         <p>Click <strong>Add Comment</strong> in the panel header. A modal opens with a text area. Comments are stored with your display name, user ID, and a timestamp.</p>
@@ -215,6 +231,8 @@
 
         <h3>Inviting a member</h3>
         <p>In the project view, open the <strong>Members</strong> panel (group icon) and click <strong>Invite</strong>. Enter the invitee's email address (Google or Microsoft account). Before sending, two checks run against the database:</p>
+
+        <figure><img src="../assets/screenshots/invite-modal.png" alt="The Invite Member dialog"><figcaption>The Invite Member dialog.</figcaption></figure>
         <ol>
           <li>Is there already a <code>Pending</code> invitation for this email + project? → blocked with a warning.</li>
           <li>Is this email already a member of the project? → blocked with a warning.</li>
@@ -291,6 +309,8 @@ flowchart TD
         <ul><li><code>src/services/utils.service.tsx</code></li></ul>
         <h3>Configuration</h3>
         <ul><li><code>src/config/config.js</code></li></ul>
+        <h3>Screenshots</h3>
+        <ul><li>The images in <code>docs/assets/screenshots/</code> are generated by the <code>capture-screenshots</code> skill from <code>e2e/screenshots/manifest.ts</code> (<code>npm run screenshots</code>). Regenerate them when the UI changes rather than editing the PNGs by hand.</li></ul>
       </section>
     </main>
     <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>

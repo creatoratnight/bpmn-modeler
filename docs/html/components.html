@@ -42,6 +42,7 @@
             <tr><td><code>importXML</code></td><td><code>(newXml: string) =&gt; Promise&lt;void&gt;</code></td><td>Programmatically loads new XML into the editor. Used when loading a milestone.</td></tr>
           </tbody>
         </table></div>
+        <blockquote><p><strong>E2E test hook:</strong> in end-to-end test mode (<code>VITE_FIREBASE_EMULATOR=true</code>), the underlying <code>bpmn-js</code> modeler instance is exposed on <code>window.__E2E_BPMN__</code> once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see <code>e2e/editor.spec.ts</code>). The block is guarded so it is stripped from production builds.</p></blockquote>
 
         <h3>DmnModeler</h3>
         <p>DMN diagram editor, wrapping <code>dmn-js</code>. Supports both the DRD (Decision Requirements Diagram) view and the decision table view; <code>views.changed</code> is used to re-export XML when the active view switches.</p>

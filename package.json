@@ -10,9 +10,10 @@
     "preview": "vite preview",
     "dev:e2e": "vite --mode e2e --port 5174 --strictPort",
     "emulators": "firebase emulators:start --only auth,database --project demo-bpmn",
-    "test:e2e": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test\"",
-    "test:e2e:ui": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --ui\"",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=chromium\"",
+    "test:e2e:ui": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=chromium --ui\"",
+    "test:e2e:report": "playwright show-report",
+    "screenshots": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=screenshots\""
   },
   "dependencies": {
     "@carbon/react": "^1.53.1",

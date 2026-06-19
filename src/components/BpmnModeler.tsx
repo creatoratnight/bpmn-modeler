@@ -26,6 +26,11 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
             if (viewPosition) {
                 setViewPosition(modelerInstance.current);
             }
+            // E2E test hook: expose the ready modeler so Playwright can drive it
+            // (e2e mode only — guarded so it never ships in production builds).
+            if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
+                (window as any).__E2E_BPMN__ = modelerInstance.current;
+            }
         });
 
         modelerInstance.current.on('canvas.viewbox.changed', () => {
@@ -45,6 +50,9 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
         });
 
         return () => {
+            if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
+                delete (window as any).__E2E_BPMN__;
+            }
             modelerInstance.current.destroy();
         };
     }, []);

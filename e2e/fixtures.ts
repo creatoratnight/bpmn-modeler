@@ -16,7 +16,7 @@ export const TEST_USER = {
  * and falls back to a plain sign-in if it already exists. No OAuth popup is
  * involved, so this is fully deterministic and offline.
  */
-async function signIn(page: Page) {
+export async function signIn(page: Page) {
   await page.goto('/');
 
   // Wait until the app has booted and exposed the emulator sign-in hook.

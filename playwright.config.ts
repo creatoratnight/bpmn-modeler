@@ -33,11 +33,20 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // The default testMatch (*.spec.ts) excludes the *.shots.ts capture file.
       use: { ...devices['Desktop Chrome'] },
     },
     // Uncomment to test other browsers (run `npx playwright install firefox webkit` first).
     // { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     // { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+
+    // Documentation screenshots — run via `npm run screenshots`, not part of the
+    // normal test run. A larger viewport produces nicer doc images.
+    {
+      name: 'screenshots',
+      testMatch: '**/screenshots/**/*.shots.ts',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
   ],
 
   // Start the Vite dev server before running the tests. The `e2e` mode loads

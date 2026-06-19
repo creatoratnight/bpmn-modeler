@@ -29,6 +29,8 @@ Full-featured BPMN diagram editor, wrapping the `bpmn-js` library. Exported as a
 | `handleResize` | `() => void` | Triggers a canvas resize; called by the parent when the side panel opens/closes. |
 | `importXML` | `(newXml: string) => Promise<void>` | Programmatically loads new XML into the editor. Used when loading a milestone. |
 
+> **E2E test hook:** in end-to-end test mode (`VITE_FIREBASE_EMULATOR=true`), the underlying `bpmn-js` modeler instance is exposed on `window.__E2E_BPMN__` once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see `e2e/editor.spec.ts`). The block is guarded so it is stripped from production builds.
+
 ---
 
 ### DmnModeler

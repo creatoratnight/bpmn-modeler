@@ -179,6 +179,12 @@ Then add a card for the new doc to `docs/html/index.html` inside `<div class="ca
 <a class="card" href="<area>.html"><h3><Area></h3><p><one-line summary></p></a>
 ```
 
+## Step 6 — Screenshots (optional)
+
+If the area would be clearer with a picture of the UI, use the **`capture-screenshots`** skill to
+generate reproducible images (Playwright + the Firebase emulators) and embed them in the Markdown
+and its HTML twin. Don't hand-make or paste screenshots — keep them derived from the running app.
+
 ## Guidelines
 
 - **Derive only from the code** — never invent a plausible-sounding description.
