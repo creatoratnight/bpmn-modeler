@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Functions — Data Dictionary</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">Functions</span>
+    <a class="md-link" href="../functions.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">Data Dictionary</p>
+      <h1>Cloud Functions</h1>
+      <p class="lede">The <code>functions/</code> package contains two Firebase Cloud Functions v2 that protect the project from runaway GCP spend. Both are triggered by Google Cloud Budget Alert Pub/Sub messages and act as escalating guards: the first locks the Firebase Realtime Database (blocking all reads and writes); the second, if a harder threshold is crossed, removes the GCP billing account entirely and stops all billable resources.</p>
+
+      <section>
+        <h2>1. <code>limitOnBudgetAlert</code></h2>
+        <p>Pub/Sub-triggered function that overwrites Firebase RTDB security rules with a deny-all policy when a budget threshold is reached.</p>
+        <p><strong>Source:</strong> <code>functions/src/billingGuard.ts</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Attribute</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Export name</td><td><code>limitOnBudgetAlert</code></td></tr>
+            <tr><td>Trigger</td><td><code>onMessagePublished</code> (Firebase Functions v2)</td></tr>
+            <tr><td>Pub/Sub topic</td><td><code>billing-resource-limit</code></td></tr>
+            <tr><td>Runtime env var</td><td><code>DATABASE_URL</code> — base URL of the Firebase Realtime Database</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Incoming Pub/Sub message payload</strong> (base64-encoded JSON in <code>event.data.message.data</code>):</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>costAmount</code></td><td><code>number</code></td><td><span class="badge req">Yes</span></td><td>USD amount spent in the billing period.</td></tr>
+            <tr><td><code>budgetAmount</code></td><td><code>number</code></td><td><span class="badge opt">No</span></td><td>Budget threshold in USD. Defaults to <code>0</code> if absent.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Action (when <code>costAmount &gt;= budgetAmount</code>):</strong></p>
+        <ol>
+          <li>Authenticates via <code>GoogleAuth</code> with scope <code>https://www.googleapis.com/auth/firebase</code>.</li>
+          <li>Issues a <code>PUT</code> request to <code>${DATABASE_URL}/.settings/rules.json</code> with body <code>{ ".read": false, ".write": false }</code>.</li>
+          <li>All Firebase RTDB reads and writes are blocked immediately.</li>
+        </ol>
+        <p><strong>Validation / edge cases:</strong></p>
+        <ul>
+          <li>If <code>budgetAmount</code> is missing from the payload, it defaults to <code>0</code>. Any positive <code>costAmount</code> therefore triggers the lock.</li>
+          <li><code>0 &gt;= 0</code> evaluates to <code>true</code>, so a <code>{ costAmount: 0, budgetAmount: 0 }</code> (or a payload with both values absent/zero) also triggers the lock. This edge case is documented in the test suite.</li>
+          <li>If <code>costAmount &lt; budgetAmount</code>, no action is taken and the function returns silently.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. <code>disableOnBudgetAlert</code></h2>
+        <p>Pub/Sub-triggered function that removes the project's GCP billing account, stopping all billable GCP resources.</p>
+        <p><strong>Source:</strong> <code>functions/src/disableBilling.ts</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Attribute</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>Export name</td><td><code>disableOnBudgetAlert</code></td></tr>
+            <tr><td>Trigger</td><td><code>onMessagePublished</code> (Firebase Functions v2)</td></tr>
+            <tr><td>Pub/Sub topic</td><td><code>billing-disable-cutoff</code></td></tr>
+            <tr><td>Runtime env var</td><td><code>GCLOUD_PROJECT</code> — the GCP project ID</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Incoming Pub/Sub message payload</strong> (same structure as <code>limitOnBudgetAlert</code>):</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>costAmount</code></td><td><code>number</code></td><td><span class="badge opt">No</span></td><td>USD amount spent. Defaults to <code>0</code> if absent.</td></tr>
+            <tr><td><code>budgetAmount</code></td><td><code>number</code></td><td><span class="badge opt">No</span></td><td>Budget threshold in USD. Defaults to <code>0</code> if absent.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Action (when <code>costAmount &gt;= budgetAmount</code>):</strong></p>
+        <ol>
+          <li>Calls <code>billing.getProjectBillingInfo({ name: "projects/${PROJECT_ID}" })</code>.</li>
+          <li>If <code>billingEnabled</code> is already <code>false</code>, exits without further action (idempotent).</li>
+          <li>Otherwise calls <code>billing.updateProjectBillingInfo</code> with <code>billingAccountName: ""</code> (empty string removes the billing account from the project).</li>
+          <li>All billable GCP resources are stopped.</li>
+        </ol>
+        <p><strong>Validation / edge cases:</strong></p>
+        <ul>
+          <li>When <code>costAmount &lt; budgetAmount</code>, the function exits before calling any billing API.</li>
+          <li>The idempotency check (<code>billingEnabled === false</code>) prevents redundant API calls on repeated alert messages.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. Configuration &amp; environment</h2>
+        <p>Both functions rely on two environment variables that are resolved from <code>src/config/.firebase.js</code> at build / deploy / test time by <code>functions/scripts/read-firebase-config.js</code>.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Variable</th><th>Source</th><th>Used by</th></tr></thead>
+          <tbody>
+            <tr><td><code>DATABASE_URL</code></td><td><code>databaseURL</code> field in <code>src/config/.firebase.js</code></td><td><code>limitOnBudgetAlert</code> (RTDB rules PUT endpoint)</td></tr>
+            <tr><td><code>GCLOUD_PROJECT</code></td><td><code>projectId</code> field in <code>src/config/.firebase.js</code></td><td><code>disableOnBudgetAlert</code> (billing API resource name)</td></tr>
+          </tbody>
+        </table></div>
+        <p><code>src/config/.firebase.js</code> is the single source of truth for Firebase environment values across the frontend, the functions, and the test runner.</p>
+      </section>
+
+      <section>
+        <h2>4. Build, deploy &amp; emulate</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>npm script</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>npm run build</code></td><td>Compiles TypeScript → <code>lib/</code> via <code>tsc</code></td></tr>
+            <tr><td><code>npm run deploy</code></td><td>Reads <code>projectId</code> from config, runs <code>firebase deploy --only functions --project {projectId}</code></td></tr>
+            <tr><td><code>npm run emulate</code></td><td>Runs <code>sync-config</code> then builds and starts the local Firebase Emulator</td></tr>
+            <tr><td><code>npm run test</code></td><td>Runs <code>sync-config</code> (to inject env vars) then Jest</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Source:</strong> <code>functions/scripts/deploy.js</code>, <code>functions/scripts/sync-config.js</code>, <code>functions/scripts/start-emulator.js</code></p>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+flowchart TD
+    A["GCP Budget Alert\n(Cloud Billing)"] -->|Pub/Sub| B["billing-resource-limit"]
+    A -->|Pub/Sub| C["billing-disable-cutoff"]
+
+    B --> D["limitOnBudgetAlert\n(billingGuard.ts)"]
+    D --> E{"costAmount\n>= budgetAmount?"}
+    E -- No --> F["Exit — no action"]
+    E -- Yes --> G["GoogleAuth.getClient()"]
+    G --> H["PUT /.settings/rules.json\ndeny-all rules"]
+    H --> I["RTDB: all reads &\nwrites blocked"]
+
+    C --> J["disableOnBudgetAlert\n(disableBilling.ts)"]
+    J --> K{"costAmount\n>= budgetAmount?"}
+    K -- No --> L["Exit — no action"]
+    K -- Yes --> M["getProjectBillingInfo()"]
+    M --> N{"billingEnabled?"}
+    N -- No --> O["Exit — already disabled"]
+    N -- Yes --> P["updateProjectBillingInfo\nbillingAccountName: ''"]
+    P --> Q["All GCP billing\ndisabled"]
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>Functions</h3>
+        <ul>
+          <li><code>functions/src/billingGuard.ts</code></li>
+          <li><code>functions/src/disableBilling.ts</code></li>
+          <li><code>functions/src/index.ts</code></li>
+        </ul>
+        <h3>Tests</h3>
+        <ul>
+          <li><code>functions/src/billingGuard.test.ts</code></li>
+          <li><code>functions/src/disableBilling.test.ts</code></li>
+        </ul>
+        <h3>Scripts &amp; config</h3>
+        <ul>
+          <li><code>functions/scripts/deploy.js</code></li>
+          <li><code>functions/scripts/read-firebase-config.js</code></li>
+          <li><code>functions/scripts/sync-config.js</code></li>
+          <li><code>functions/scripts/start-emulator.js</code></li>
+          <li><code>functions/jest.setup.js</code></li>
+        </ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

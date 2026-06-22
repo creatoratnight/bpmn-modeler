@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Config — Data Dictionary</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">Config</span>
+    <a class="md-link" href="../config.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">Data Dictionary</p>
+      <h1>Config</h1>
+      <p class="lede">The <code>src/config/</code> directory holds two runtime configuration files consumed by the React frontend and the Cloud Functions build scripts. A third project-root file, <code>firebase.json</code>, drives the Firebase CLI for deployments and the local emulator. Application code imports only from <code>src/config/</code> — nothing reads from <code>firebase.json</code> at runtime.</p>
+
+      <section>
+        <h2>1. Application config</h2>
+        <p>A single exported object in <code>src/config/config.js</code> that controls feature flags and the application version string. It is a plain JS object with no external dependencies.</p>
+        <p><strong>Source:</strong> <code>src/config/config.js</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>bpmnModelerVersion</code></td><td><code>string</code></td><td><code>"0.5.1"</code></td><td>Human-readable application version, displayed in the UI header.</td></tr>
+            <tr><td><code>enableGoogleSignIn</code></td><td><code>boolean</code></td><td><code>true</code></td><td>When <code>true</code>, the "Sign in with Google" button is rendered in the sign-in view.</td></tr>
+            <tr><td><code>enableMicrosoftSignIn</code></td><td><code>boolean</code></td><td><code>true</code></td><td>When <code>true</code>, the "Sign in with Microsoft" button is rendered in the sign-in view.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li>All three fields have no runtime validation — they are read directly wherever needed.</li>
+          <li>Setting both <code>enableGoogleSignIn</code> and <code>enableMicrosoftSignIn</code> to <code>false</code> results in no sign-in options being shown.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. Firebase config</h2>
+        <p><code>src/config/.firebase.js</code> initialises the Firebase application and exports the auth primitives used throughout <code>src/services/</code>. The file is <strong>gitignored</strong> (it may contain API keys). A placeholder template is committed as <code>src/config/.example.firebase.js</code> — copy it to <code>.firebase.js</code> and fill in real values before running or deploying.</p>
+        <p><strong>Source:</strong> <code>src/config/.example.firebase.js</code> (template), <code>src/config/.firebase.js</code> (gitignored, actual)</p>
+
+        <h3>firebaseConfig shape</h3>
+        <p>The <code>firebaseConfig</code> object is passed to <code>initializeApp()</code>. All fields are strings.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Description</th><th>Example (from template)</th></tr></thead>
+          <tbody>
+            <tr><td><code>apiKey</code></td><td>Firebase Web API key.</td><td><code>""</code></td></tr>
+            <tr><td><code>authDomain</code></td><td>Firebase Auth domain.</td><td><code>""</code> (typically <code>{projectId}.firebaseapp.com</code>)</td></tr>
+            <tr><td><code>databaseURL</code></td><td>Firebase Realtime Database base URL. Used by the RTDB SDK and read by the Cloud Functions build scripts via <code>functions/scripts/read-firebase-config.js</code>.</td><td><code>""</code> (europe-west1 region in the live config)</td></tr>
+            <tr><td><code>projectId</code></td><td>GCP / Firebase project ID. Used by the Cloud Functions deploy script.</td><td><code>""</code></td></tr>
+            <tr><td><code>storageBucket</code></td><td>Firebase Storage bucket. Present in the config but <strong>not currently used</strong> by the application.</td><td><code>""</code></td></tr>
+            <tr><td><code>messagingSenderId</code></td><td>Firebase Cloud Messaging sender ID. Present in the config but not used at runtime.</td><td><code>""</code></td></tr>
+            <tr><td><code>appId</code></td><td>Firebase Web App ID.</td><td><code>""</code></td></tr>
+            <tr><td><code>measurementId</code></td><td>Google Analytics measurement ID. Present in config but not explicitly used in app code.</td><td><code>""</code></td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Exports</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Export</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>auth</code></td><td><code>Auth</code></td><td>Firebase Auth instance created from the initialised app. Imported by <code>user.service.tsx</code>.</td></tr>
+            <tr><td><code>GoogleAuthProvider</code></td><td>class</td><td>Re-exported from <code>firebase/auth</code>. Used in <code>user.service.tsx</code> for Google OAuth.</td></tr>
+            <tr><td><code>microsoftProvider</code></td><td><code>OAuthProvider</code></td><td><code>new OAuthProvider('microsoft.com')</code>. Used in <code>user.service.tsx</code> for Microsoft OAuth.</td></tr>
+            <tr><td><code>signInWithPopup</code></td><td>function</td><td>Re-exported from <code>firebase/auth</code>. Imported in <code>user.service.tsx</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li>No runtime validation of config values — a missing <code>databaseURL</code> will cause all RTDB operations to fail silently or throw at the SDK level.</li>
+          <li>The template enforces the shape; all fields must be non-empty strings in a production deployment.</li>
+        </ul>
+
+        <h3>End-to-end test mode (emulators)</h3>
+        <p>When the app is started with <code>VITE_FIREBASE_EMULATOR=true</code> (set by <code>vite --mode e2e</code> via <code>.env.e2e</code>), the config file points the SDK at the local Firebase emulators and exposes a test hook. The block is guarded so it is stripped from production builds.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Action</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td><code>connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })</code></td><td>Routes all Firebase Auth calls to the local Auth emulator.</td></tr>
+            <tr><td><code>connectDatabaseEmulator(getDatabase(app), '127.0.0.1', 9000)</code></td><td>Routes all RTDB calls to the local Database emulator.</td></tr>
+            <tr><td><code>window.__E2E_AUTH__ = { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword }</code></td><td>Test-only hook used by the Playwright fixture (<code>e2e/fixtures.ts</code>) to sign in without the OAuth popup.</td></tr>
+          </tbody>
+        </table></div>
+        <p>The block adds these imports from <code>firebase/auth</code> (<code>connectAuthEmulator</code>, <code>signInWithEmailAndPassword</code>, <code>createUserWithEmailAndPassword</code>) and <code>firebase/database</code> (<code>connectDatabaseEmulator</code>). It is present in both <code>.example.firebase.js</code> (committed) and <code>.firebase.js</code> (gitignored, actual).</p>
+      </section>
+
+      <section>
+        <h2>3. Firebase project config (firebase.json)</h2>
+        <p><code>firebase.json</code> is read exclusively by the Firebase CLI (<code>firebase deploy</code>, <code>firebase emulators:start</code>). It is not imported by application code.</p>
+        <p><strong>Source:</strong> <code>firebase.json</code></p>
+
+        <h3>functions</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>source</code></td><td><code>"functions"</code></td><td>Directory containing the Cloud Functions package.</td></tr>
+            <tr><td><code>predeploy</code></td><td><code>["npm --prefix functions install", "npm --prefix functions run build"]</code></td><td>Steps run before every function deploy: install dependencies, then compile TypeScript → <code>lib/</code>.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>hosting</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>public</code></td><td><code>"dist"</code></td><td>Directory served by Firebase Hosting (Vite build output).</td></tr>
+            <tr><td><code>ignore</code></td><td><code>["firebase.json", "**/.*", "**/node_modules/**"]</code></td><td>Files excluded from the hosting upload.</td></tr>
+            <tr><td><code>rewrites</code></td><td><code>[{ source: "**", destination: "/index.html" }]</code></td><td>Catch-all SPA rewrite — all paths serve <code>index.html</code> so client-side routing works.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>emulators</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Emulator</th><th>Port</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>auth</code></td><td>9099</td><td>Local Firebase Auth emulator. Used by the end-to-end tests to sign in without real OAuth.</td></tr>
+            <tr><td><code>database</code></td><td>9000</td><td>Local Realtime Database emulator. Used by the end-to-end tests; defaults to allow-all rules.</td></tr>
+            <tr><td><code>functions</code></td><td>5001</td><td>Local Firebase Functions emulator.</td></tr>
+            <tr><td><code>pubsub</code></td><td>8085</td><td>Local Pub/Sub emulator (used to trigger billing-guard functions in development).</td></tr>
+            <tr><td><code>ui</code></td><td>4000</td><td>Firebase Emulator UI dashboard.</td></tr>
+            <tr><td><code>singleProjectMode</code></td><td><code>true</code></td><td>Emulators operate as a single project, enabling cross-emulator calls.</td></tr>
+          </tbody>
+        </table></div>
+        <blockquote><p>No deploy-level <code>database.rules</code> key is configured in <code>firebase.json</code> — RTDB security rules are managed in the Firebase console, and omitting the key keeps a bare <code>firebase deploy</code> from pushing rules to production. The Database emulator therefore defaults to allow-all rules, which is intentional for tests.</p></blockquote>
+      </section>
+
+      <section>
+        <h2>4. Build config (vite.config.ts)</h2>
+        <p><code>vite.config.ts</code> contains the Vite build configuration for the frontend. It is minimal — only the React plugin is registered. No aliases, proxy rules, or environment-variable transforms are configured.</p>
+        <p><strong>Source:</strong> <code>vite.config.ts</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Setting</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>plugins</code></td><td><code>[react()]</code></td><td><code>@vitejs/plugin-react</code> — enables JSX transform and React Fast Refresh in development.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>5. End-to-end test config (playwright.config.ts)</h2>
+        <p><code>playwright.config.ts</code> configures the Playwright end-to-end test runner. Tests live in <code>e2e/</code>. The config auto-starts the Vite dev server (in e2e mode) on a dedicated port before the suite; the Firebase emulators are started around the run by the <code>test:e2e</code> / <code>test:e2e:ui</code> scripts.</p>
+        <p><strong>Source:</strong> <code>playwright.config.ts</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Setting</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>testDir</code></td><td><code>'./e2e'</code></td><td>Directory containing the <code>*.spec.ts</code> test files.</td></tr>
+            <tr><td><code>fullyParallel</code></td><td><code>true</code></td><td>Runs tests across files in parallel.</td></tr>
+            <tr><td><code>forbidOnly</code></td><td><code>!!process.env.CI</code></td><td>Fails the run if <code>test.only</code> is left in the source when running on CI.</td></tr>
+            <tr><td><code>retries</code></td><td><code>2</code> on CI, <code>0</code> locally</td><td>Retry count for failed tests.</td></tr>
+            <tr><td><code>workers</code></td><td><code>1</code> on CI, default locally</td><td>Parallel worker count.</td></tr>
+            <tr><td><code>reporter</code></td><td><code>'html'</code></td><td>Generates an HTML report (opened via <code>npm run test:e2e:report</code>).</td></tr>
+            <tr><td><code>use.baseURL</code></td><td><code>'http://localhost:5174'</code></td><td>Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal <code>npm run dev</code> on 5173.</td></tr>
+            <tr><td><code>use.trace</code></td><td><code>'on-first-retry'</code></td><td>Captures a Playwright trace when a test is retried.</td></tr>
+            <tr><td><code>projects</code></td><td><code>[chromium, screenshots]</code></td><td><code>chromium</code> runs the <code>*.spec.ts</code> tests (Desktop Chrome; Firefox/WebKit commented out). <code>screenshots</code> runs only <code>*.shots.ts</code> at a 1440×900 viewport for documentation captures and is excluded from the normal test run.</td></tr>
+            <tr><td><code>webServer.command</code></td><td><code>'npm run dev:e2e'</code></td><td>Command started before the suite (<code>vite --mode e2e</code>, loads <code>.env.e2e</code>).</td></tr>
+            <tr><td><code>webServer.url</code></td><td><code>'http://localhost:5174'</code></td><td>URL polled until the dev server is ready.</td></tr>
+            <tr><td><code>webServer.reuseExistingServer</code></td><td><code>!process.env.CI</code></td><td>Reuses an already-running dev server locally; always starts fresh on CI.</td></tr>
+            <tr><td><code>webServer.timeout</code></td><td><code>120000</code></td><td>Milliseconds to wait for the dev server to boot.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>npm scripts (from <code>package.json</code>):</strong></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Script</th><th>Command</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>dev:e2e</code></td><td><code>vite --mode e2e --port 5174 --strictPort</code></td><td>Dev server in e2e mode on the dedicated port 5174; loads <code>.env.e2e</code> (<code>VITE_FIREBASE_EMULATOR=true</code>).</td></tr>
+            <tr><td><code>emulators</code></td><td><code>firebase emulators:start --only auth,database --project demo-bpmn</code></td><td>Starts the Auth + Database emulators (for a manual two-terminal UI run).</td></tr>
+            <tr><td><code>test:e2e</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium"</code></td><td>Boots the emulators, runs the test suite headless (chromium project only — never the screenshot captures), tears them down.</td></tr>
+            <tr><td><code>test:e2e:ui</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium --ui"</code></td><td>Interactive Playwright UI mode; boots the emulators automatically (no separate <code>npm run emulators</code> needed).</td></tr>
+            <tr><td><code>test:e2e:report</code></td><td><code>playwright show-report</code></td><td>Opens the last HTML report.</td></tr>
+            <tr><td><code>screenshots</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"</code></td><td>Captures documentation screenshots (the <code>screenshots</code> project) into <code>docs/assets/screenshots/</code>. Managed by the <code>capture-screenshots</code> skill.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Authentication for tests:</strong> the <code>demo-bpmn</code> project ID runs the emulators fully offline (no real credentials). The Playwright fixture <code>e2e/fixtures.ts</code> signs in via the <code>window.__E2E_AUTH__</code> hook (see §2), creating a <strong>unique throwaway user per test</strong> (derived from the test ID). Because projects are scoped per user (<code>users/{uid}/projects</code>), each test runs against an empty, isolated dataset while keeping full parallelism; the emulator database is reset each run. The pre-auth smoke tests (<code>e2e/sign-in.spec.ts</code>) need no sign-in.</p>
+        <p><strong>Test coverage:</strong></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Spec</th><th>What it covers</th></tr></thead>
+          <tbody>
+            <tr><td><code>e2e/sign-in.spec.ts</code></td><td>Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render.</td></tr>
+            <tr><td><code>e2e/projects.spec.ts</code></td><td>After sign-in: the "Your Projects" view and Add Project action render, and a fresh user starts with no projects (empty state) — relying on per-test user isolation.</td></tr>
+            <tr><td><code>e2e/project-crud.spec.ts</code></td><td>Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test runs as its own user (per-test isolation) so tests stay independent.</td></tr>
+            <tr><td><code>e2e/editor.spec.ts</code></td><td>BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on <code>window.__E2E_BPMN__</code>), save it, and confirm the task persisted by reloading and re-reading the saved XML.</td></tr>
+            <tr><td><code>e2e/core-flows.spec.ts</code></td><td>Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup <code>State before loading '&lt;name&gt;'</code> milestone is created).</td></tr>
+            <tr><td><code>e2e/validation.spec.ts</code></td><td>Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered.</td></tr>
+            <tr><td><code>e2e/model-ops.spec.ts</code></td><td>Model operations &amp; persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via <code>.. / &lt;folder&gt;</code>), download a <code>.bpmn</code> file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the <code>autoSave</code> localStorage key).</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Documentation screenshots:</strong> the <code>screenshots</code> Playwright project (run via <code>npm run screenshots</code>) captures UI images into <code>docs/assets/screenshots/</code>. Shots are defined in <code>e2e/screenshots/manifest.ts</code> and captured serially by <code>e2e/screenshots/capture.shots.ts</code> (toasts hidden, fixed names for deterministic images). This is driven by the <code>capture-screenshots</code> skill; the images are committed and embedded in the Markdown docs and their HTML twins.</p>
+        <p><strong>Notes:</strong></p>
+        <ul>
+          <li>The dev server requires a valid <code>src/config/.firebase.js</code> to boot (Firebase is initialised at module load). In CI, generate it from <code>.example.firebase.js</code> with dummy values — the emulators run in demo mode and need no real keys.</li>
+          <li>The Firebase CLI requires Node.js ≥ 20 (the repo pins 22 in <code>.nvmrc</code>); the emulators require a JVM (Java) on the <code>PATH</code>.</li>
+          <li>Browser binaries are installed separately via <code>npx playwright install chromium</code>.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+flowchart TD
+    A["src/config/config.js\nbpmnModelerVersion\nenableGoogleSignIn\nenableMicrosoftSignIn"] --> B["App.tsx / header\nconditional sign-in buttons"]
+
+    C["src/config/.example.firebase.js\n(template, committed)"]
+    D["src/config/.firebase.js\n(gitignored, fill from example)"]
+    C -.->|"copy & fill"| D
+
+    D --> E["user.service.tsx\nauth, GoogleAuthProvider,\nmicrosoftProvider, signInWithPopup"]
+    D --> F["models.service.tsx\ngetDatabase()"]
+    D --> G["projects.service.tsx\ngetDatabase()"]
+    D --> H["functions/scripts/read-firebase-config.js\nextracts databaseURL → DATABASE_URL\nextracts projectId → GCLOUD_PROJECT"]
+
+    I["firebase.json\n(Firebase CLI only)"] --> J["firebase deploy\n(Functions + Hosting)"]
+    I --> K["firebase emulators\nauth :9099 / database :9000\nfunctions :5001 / pubsub :8085 / UI :4000"]
+
+    L["vite.config.ts\n(Vite build tool)"] --> M["npm run build\n→ dist/"]
+    M --> J
+
+    N["playwright.config.ts\n(E2E test runner)"] -->|"webServer: npm run dev:e2e"| O["Vite dev server :5174\n.env.e2e → VITE_FIREBASE_EMULATOR=true"]
+    O --> D
+    Q["npm run test:e2e\nfirebase emulators:exec"] --> K
+    Q --> N
+    O --> R["e2e/*.spec.ts + e2e/fixtures.ts"]
+    R -->|"window.__E2E_AUTH__"| K
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>Config files</h3>
+        <ul>
+          <li><code>src/config/config.js</code></li>
+          <li><code>src/config/.example.firebase.js</code></li>
+          <li><code>src/config/.firebase.js</code></li>
+        </ul>
+        <h3>Firebase project &amp; build</h3>
+        <ul>
+          <li><code>firebase.json</code></li>
+          <li><code>vite.config.ts</code></li>
+        </ul>
+        <h3>Testing</h3>
+        <ul>
+          <li><code>playwright.config.ts</code></li>
+          <li><code>.env.e2e</code></li>
+          <li><code>e2e/fixtures.ts</code></li>
+          <li><code>e2e/sign-in.spec.ts</code></li>
+          <li><code>e2e/projects.spec.ts</code></li>
+          <li><code>e2e/project-crud.spec.ts</code></li>
+          <li><code>e2e/editor.spec.ts</code></li>
+          <li><code>e2e/core-flows.spec.ts</code></li>
+          <li><code>e2e/validation.spec.ts</code></li>
+          <li><code>e2e/model-ops.spec.ts</code></li>
+          <li><code>e2e/screenshots/manifest.ts</code></li>
+          <li><code>e2e/screenshots/capture.shots.ts</code></li>
+        </ul>
+        <h3>Consumers</h3>
+        <ul>
+          <li><code>src/services/user.service.tsx</code></li>
+          <li><code>src/services/models.service.tsx</code></li>
+          <li><code>src/services/projects.service.tsx</code></li>
+          <li><code>functions/scripts/read-firebase-config.js</code></li>
+        </ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

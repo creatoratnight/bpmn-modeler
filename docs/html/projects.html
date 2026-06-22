@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projects — Data Dictionary</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">Projects</span>
+    <a class="md-link" href="../projects.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">Data Dictionary</p>
+      <h1>Projects</h1>
+      <p class="lede">The <strong>projects</strong> domain is the top-level organisational unit of the BPMN Modeler. A project groups BPMN and DMN models, optional folders, and a set of members who collaborate on those models. The frontend fetches projects from Firebase Realtime Database on login and keeps them in application state; all create, update, and delete operations go directly to RTDB via the Firebase JS SDK.</p>
+
+      <section>
+        <h2>1. Project</h2>
+        <p>A container for models, folders, and collaborating members.</p>
+        <p><strong>Source:</strong> <code>src/components/ProjectList.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>name</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Human-readable project name; used as the URL segment (<code>/project/{name}</code>).</td></tr>
+            <tr><td><code>description</code></td><td><code>string</code></td><td><span class="badge opt">No</span></td><td>Free-text description; defaults to <code>''</code> on creation.</td></tr>
+            <tr><td><code>ownerId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the user who created the project.</td></tr>
+            <tr><td><code>createdAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Creation timestamp, set once at project creation.</td></tr>
+            <tr><td><code>updatedAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Last-modified timestamp; updated on any structural change (rename, model add/delete, member change).</td></tr>
+            <tr><td><code>members</code></td><td><code>{ [userId]: MemberRole }</code></td><td><span class="badge req">Yes</span></td><td>Map of member user IDs to their role. Always contains at least the owner.</td></tr>
+            <tr><td><code>models</code></td><td><code>{ [modelId]: true }</code></td><td><span class="badge opt">No</span></td><td>Sparse index of model IDs belonging to this project.</td></tr>
+            <tr><td><code>folders</code></td><td><code>{ [folderId]: Folder }</code></td><td><span class="badge opt">No</span></td><td>Embedded folder objects keyed by auto-generated ID.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>projects/{projectId}</code></p>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li><code>name</code> must be non-empty (enforced in <code>AddProjectModal</code>).</li>
+          <li><code>members</code> is initialised with <code>{ [ownerId]: 'owner' }</code> on creation.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. Model (<code>bpmnModels</code>)</h2>
+        <p>A BPMN or DMN diagram. Both types are stored in the same RTDB collection (<code>bpmnModels</code>); the <code>type</code> field distinguishes them.</p>
+        <p><strong>Source:</strong> <code>src/services/models.service.tsx</code>, <code>src/components/ProjectList.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>name</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Display name; also embedded in the XML as the process/decision <code>name</code> attribute on creation.</td></tr>
+            <tr><td><code>type</code></td><td><code>'bpmn' | 'dmn'</code></td><td><span class="badge req">Yes</span></td><td>Model type; determines which editor opens and which XML template is used.</td></tr>
+            <tr><td><code>ownerId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the user who created or last saved the model.</td></tr>
+            <tr><td><code>projectId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>ID of the parent project. Used to index models back to their project.</td></tr>
+            <tr><td><code>folder</code></td><td><code>string | null</code></td><td><span class="badge opt">No</span></td><td>ID of the containing <code>Folder</code>, or <code>null</code> when the model is at the project root.</td></tr>
+            <tr><td><code>createdAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Creation timestamp; set once, never updated on save.</td></tr>
+            <tr><td><code>updatedAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Last-saved timestamp; updated on every save and on rename.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>bpmnModels/{modelId}</code></p>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li><code>name</code> must match <code>/^[a-zA-Z_][\w-.\s]*$/</code> — must start with a letter or underscore, followed by alphanumeric characters, underscores, hyphens, periods, or spaces (QName-compatible format). Enforced in <code>AddBPMNModelModal</code>.</li>
+          <li>A camelCase-converted form of the name (<code>camelize(name)</code>) is used as the XML <code>id</code> attribute for the BPMN process or DMN decision on creation and rename.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. Model XML data (<code>modelXmlData</code>)</h2>
+        <p>The raw XML content of a model is stored separately to keep model metadata lightweight.</p>
+        <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>xmlData</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Full BPMN 2.0 or DMN 1.3 XML document.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>modelXmlData/{modelId}/xmlData</code></p>
+      </section>
+
+      <section>
+        <h2>4. Folder</h2>
+        <p>An optional grouping within a project. Folders are embedded directly inside the project document (not a top-level collection) and hold no models themselves — models reference the folder via <code>bpmnModels/{id}/folder</code>.</p>
+        <p><strong>Source:</strong> <code>src/components/ProjectList.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>name</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Display name of the folder.</td></tr>
+            <tr><td><code>type</code></td><td><code>'folder'</code></td><td><span class="badge req">Yes</span></td><td>Constant discriminator; always <code>'folder'</code>.</td></tr>
+            <tr><td><code>projectId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>ID of the parent project.</td></tr>
+            <tr><td><code>ownerId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the user who created the folder.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>projects/{projectId}/folders/{folderId}</code></p>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li>A folder can only be deleted when it contains no models (<code>currentProject.models.filter(m =&gt; m.folder === folderId).length === 0</code>). The "Delete Folder" menu item is disabled otherwise.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. Milestone</h2>
+        <p>A named snapshot of a model's XML at a point in time. Used for lightweight version history.</p>
+        <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>name</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>User-given label for the milestone.</td></tr>
+            <tr><td><code>description</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Free-text description.</td></tr>
+            <tr><td><code>xmlData</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Full XML snapshot of the model at this point.</td></tr>
+            <tr><td><code>createdBy</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the user who saved the milestone.</td></tr>
+            <tr><td><code>createdAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Creation timestamp.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>milestones/{modelId}/{milestoneId}</code></p>
+      </section>
+
+      <section>
+        <h2>6. Comment</h2>
+        <p>A text comment attached to a model.</p>
+        <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>text</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Comment body.</td></tr>
+            <tr><td><code>createdBy</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the author.</td></tr>
+            <tr><td><code>creatorName</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td><code>displayName</code> of the author at the time of creation (denormalised).</td></tr>
+            <tr><td><code>createdAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Creation timestamp.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>comments/{modelId}/{commentId}</code></p>
+      </section>
+
+      <section>
+        <h2>7. Invitation</h2>
+        <p>A pending, accepted, or declined invitation to join a project.</p>
+        <p><strong>Source:</strong> <code>src/components/InviteModal.tsx</code>, <code>src/components/ProjectList.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>projectId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>ID of the project the invite is for.</td></tr>
+            <tr><td><code>invitedEmail</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Email address of the invitee (stored lower-case).</td></tr>
+            <tr><td><code>senderId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the user who sent the invite.</td></tr>
+            <tr><td><code>status</code></td><td><code>InvitationStatus</code></td><td><span class="badge req">Yes</span></td><td>Lifecycle state.</td></tr>
+            <tr><td><code>sentAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>When the invite was sent.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>invitations/{invitationId}</code></p>
+        <p><strong>Validation:</strong></p>
+        <ul>
+          <li><code>invitedEmail</code> must match <code>/^[^\s@]+@[^\s@]+\.[^\s@]+$/</code>.</li>
+          <li>A second <code>Pending</code> invite to the same email + project is blocked (deduplication checked before write).</li>
+          <li>If the invitee is already a member of the project, the invite is blocked.</li>
+          <li>Accepting sets <code>status → 'Accepted'</code> and adds the user to <code>projects/{id}/members/{uid}</code> as <code>'editor'</code>.</li>
+          <li>Declining sets <code>status → 'Declined'</code>; the document is not removed.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Enums &amp; status codes</h2>
+
+        <h3>MemberRole</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>'owner'</code></td><td>Created the project; can rename, delete, add/remove members.</td></tr>
+            <tr><td><code>'editor'</code></td><td>Added via invitation; can create, rename, duplicate, download, and delete own models.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>InvitationStatus</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>'Pending'</code></td><td>Invite sent, awaiting response. Shown in the UI banner.</td></tr>
+            <tr><td><code>'Accepted'</code></td><td>Invitee accepted; user was added to the project as <code>'editor'</code>.</td></tr>
+            <tr><td><code>'Declined'</code></td><td>Invitee declined; document retained for audit, not shown in UI.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>Model type</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>'bpmn'</code></td><td>Business Process Model and Notation diagram.</td></tr>
+            <tr><td><code>'dmn'</code></td><td>Decision Model and Notation table. DMN is stored but opening in the editor is not yet fully supported (cursor shows <code>not-allowed</code> in the side panel).</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+erDiagram
+    PROJECT {
+        string id
+        string name
+        string description
+        string ownerId
+        string createdAt
+        string updatedAt
+    }
+    USER {
+        string id
+        string displayName
+        string email
+        string imageUrl
+    }
+    MODEL {
+        string id
+        string name
+        string type
+        string ownerId
+        string projectId
+        string folder
+        string createdAt
+        string updatedAt
+    }
+    MODEL_XML {
+        string modelId
+        string xmlData
+    }
+    FOLDER {
+        string id
+        string name
+        string type
+        string projectId
+        string ownerId
+    }
+    MILESTONE {
+        string id
+        string name
+        string description
+        string xmlData
+        string createdBy
+        string createdAt
+    }
+    COMMENT {
+        string id
+        string text
+        string createdBy
+        string creatorName
+        string createdAt
+    }
+    INVITATION {
+        string id
+        string projectId
+        string invitedEmail
+        string senderId
+        string status
+        string sentAt
+    }
+
+    PROJECT ||--o{ MODEL : "models index"
+    PROJECT ||--o{ FOLDER : "folders (embedded)"
+    PROJECT }o--o{ USER : "members (role map)"
+    MODEL ||--|| MODEL_XML : "xmlData (separate node)"
+    MODEL ||--o{ MILESTONE : "milestones"
+    MODEL ||--o{ COMMENT : "comments"
+    MODEL }o--o| FOLDER : "optional folder"
+    PROJECT ||--o{ INVITATION : "invitations"
+    USER ||--o{ PROJECT : "users/{uid}/projects index"
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>Services</h3>
+        <ul>
+          <li><code>src/services/projects.service.tsx</code></li>
+          <li><code>src/services/models.service.tsx</code></li>
+        </ul>
+        <h3>Components</h3>
+        <ul>
+          <li><code>src/components/ProjectList.tsx</code></li>
+          <li><code>src/components/AddProjectModal.tsx</code></li>
+          <li><code>src/components/RenameProjectModal.tsx</code></li>
+          <li><code>src/components/AddBPMNModelModal.tsx</code></li>
+          <li><code>src/components/RenameModelModal.tsx</code></li>
+          <li><code>src/components/AddFolderModal.tsx</code></li>
+          <li><code>src/components/RenameFolderModal.tsx</code></li>
+          <li><code>src/components/MoveModelModal.tsx</code></li>
+          <li><code>src/components/InviteModal.tsx</code></li>
+          <li><code>src/components/MilestonesModal.tsx</code></li>
+        </ul>
+        <h3>App root (data fetch + routing)</h3>
+        <ul>
+          <li><code>src/App.tsx</code></li>
+        </ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

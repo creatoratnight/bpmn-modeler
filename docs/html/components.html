@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Components — Data Dictionary</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">📚 Documentation</a>
+    <span class="crumb">Components</span>
+    <a class="md-link" href="../components.md">View Markdown</a>
+  </header>
+  <div class="layout">
+    <main class="content">
+      <p class="kicker">Component Reference</p>
+      <h1>UI Components</h1>
+      <p class="lede">The frontend is built in React (TypeScript/TSX) using the IBM Carbon Design System. It consists of two imperative modeler wrappers (<code>BpmnModeler</code>, <code>DmnModeler</code>), one orchestrating list component (<code>ProjectList</code>), and fourteen modal dialogs covering project/folder/model management, collaboration, and utility actions. All modals are controlled components (shown/hidden via an <code>isOpen</code> prop) and return <code>null</code> when closed — except <code>MoveModelModal</code>, which has no early-return guard.</p>
+
+      <section>
+        <h2>1. Editor wrappers</h2>
+
+        <h3>BpmnModeler</h3>
+        <p>Full-featured BPMN diagram editor, wrapping the <code>bpmn-js</code> library. Exported as a <code>forwardRef</code> component so the parent can call imperative methods on the canvas.</p>
+        <p><strong>Source:</strong> <code>src/components/BpmnModeler.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>xml</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>BPMN 2.0 XML to load into the canvas. Re-importing resets the view.</td></tr>
+            <tr><td><code>viewPosition</code></td><td><code>{ zoom: number, scroll: { x, y, width, height } }</code></td><td><span class="badge opt">No</span></td><td>If provided, restores the zoom level and scroll offset after XML import.</td></tr>
+            <tr><td><code>onModelChange</code></td><td><code>(xml: string) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Fired on every diagram change event; receives the updated XML.</td></tr>
+            <tr><td><code>onViewPositionChange</code></td><td><code>(viewbox: object) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Fired when the canvas viewport changes; receives the current viewbox.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Imperative ref API (via <code>useImperativeHandle</code>):</strong></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Method</th><th>Signature</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>saveSVG</code></td><td><code>() =&gt; Promise&lt;{ svg: string }&gt;</code></td><td>Returns the current diagram as an SVG string. Used by the parent to export PNG.</td></tr>
+            <tr><td><code>handleResize</code></td><td><code>() =&gt; void</code></td><td>Triggers a canvas resize; called by the parent when the side panel opens/closes.</td></tr>
+            <tr><td><code>importXML</code></td><td><code>(newXml: string) =&gt; Promise&lt;void&gt;</code></td><td>Programmatically loads new XML into the editor. Used when loading a milestone.</td></tr>
+          </tbody>
+        </table></div>
+        <blockquote><p><strong>E2E test hook:</strong> in end-to-end test mode (<code>VITE_FIREBASE_EMULATOR=true</code>), the underlying <code>bpmn-js</code> modeler instance is exposed on <code>window.__E2E_BPMN__</code> once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see <code>e2e/editor.spec.ts</code>). The block is guarded so it is stripped from production builds.</p></blockquote>
+
+        <h3>DmnModeler</h3>
+        <p>DMN diagram editor, wrapping <code>dmn-js</code>. Supports both the DRD (Decision Requirements Diagram) view and the decision table view; <code>views.changed</code> is used to re-export XML when the active view switches.</p>
+        <p><strong>Source:</strong> <code>src/components/DmnModeler.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>xml</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>DMN 1.3 XML to load.</td></tr>
+            <tr><td><code>viewPosition</code></td><td><code>{ zoom: number, scroll: { x, y, width, height } }</code></td><td><span class="badge opt">No</span></td><td>Restores viewport after import when provided.</td></tr>
+            <tr><td><code>onDMNChange</code></td><td><code>(xml: string) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Fired after each <code>views.changed</code> event; receives the updated XML.</td></tr>
+            <tr><td><code>onViewPositionChange</code></td><td><code>(viewbox: object) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Fired on viewport change.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Imperative ref API:</strong></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Method</th><th>Signature</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>handleResize</code></td><td><code>() =&gt; void</code></td><td>Canvas resize trigger.</td></tr>
+            <tr><td><code>importXML</code></td><td><code>(newXml: string) =&gt; Promise&lt;void&gt;</code></td><td>Loads new XML programmatically.</td></tr>
+          </tbody>
+        </table></div>
+        <blockquote><p><code>DmnModeler</code> does <strong>not</strong> expose <code>saveSVG</code> (unlike <code>BpmnModeler</code>). The PNG download toolbar button is therefore only shown for BPMN models.</p></blockquote>
+      </section>
+
+      <section>
+        <h2>2. ProjectList</h2>
+        <p>The main view component rendered by <code>App</code> for both <code>ALL_PROJECTS</code> and <code>PROJECT</code> view modes. Owns all project/model/folder CRUD operations and all project-level modal state. Fetches its own invitation list on mount.</p>
+        <p><strong>Source:</strong> <code>src/components/ProjectList.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>user</code></td><td><code>{ uid: string, email: string }</code></td><td><span class="badge req">Yes</span></td><td>Authenticated Firebase user.</td></tr>
+            <tr><td><code>viewMode</code></td><td><code>'ALL_PROJECTS' | 'PROJECT'</code></td><td><span class="badge req">Yes</span></td><td>Determines which table is shown.</td></tr>
+            <tr><td><code>currentProject</code></td><td>Project object</td><td><span class="badge req">Yes</span></td><td>The open project (may be <code>{}</code> in <code>ALL_PROJECTS</code> mode).</td></tr>
+            <tr><td><code>selectedFolder</code></td><td>Folder object or <code>{}</code></td><td><span class="badge req">Yes</span></td><td>The active folder filter (empty object = project root).</td></tr>
+            <tr><td><code>onOpenProject</code></td><td><code>(project) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Navigate into a project.</td></tr>
+            <tr><td><code>onOpenModel</code></td><td><code>(project, model) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Navigate into a model or folder.</td></tr>
+            <tr><td><code>onNavigateHome</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Navigate back to <code>/</code>.</td></tr>
+            <tr><td><code>projects</code></td><td><code>Project[]</code></td><td><span class="badge req">Yes</span></td><td>Full list of projects for the authenticated user.</td></tr>
+            <tr><td><code>fetchUserProjects</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Callback to trigger a project refresh from the parent.</td></tr>
+            <tr><td><code>onOpenShareModal</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Delegate share modal open to parent (<code>App</code>).</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Behaviour rules (derived from code):</strong></p>
+        <ul>
+          <li>Projects are split into two tables: <strong>Your Projects</strong> (<code>ownerId === user.uid</code>) and <strong>Shared with me</strong> (all others).</li>
+          <li>In the models table, only <code>bpmn</code> and <code>dmn</code> rows are selectable for batch actions. Folder and <code>folderUp</code> rows are not selectable.</li>
+          <li>The <strong>Delete Folder</strong> menu item is <code>disabled</code> (not hidden) when the folder contains any models.</li>
+          <li>DMN model rows render with <code>cursor: not-allowed</code> and do not navigate on click.</li>
+          <li>The Members panel state (<code>isMembersPanelOpen</code>) is persisted to <code>localStorage</code>.</li>
+          <li>Bulk batch actions (download, duplicate, delete, move) silently filter out any folder items from the selection before acting.</li>
+          <li>The <code>AddBPMNModelModal</code> is reused for both BPMN and DMN creation; the callback (<code>handleAddBPMNModel</code> vs <code>handleAddDMNModel</code>) is what differs.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. Project &amp; folder modals</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Component</th><th>Purpose</th><th>Key props</th><th>Validation</th></tr></thead>
+          <tbody>
+            <tr><td><code>AddProjectModal</code></td><td>Create a new project</td><td><code>onAddProject(name)</code></td><td>Name must be non-empty/non-whitespace.</td></tr>
+            <tr><td><code>RenameProjectModal</code></td><td>Rename an existing project</td><td><code>onRenameProject(name)</code>, <code>currentName</code></td><td>Name must be non-empty. <code>currentName</code> is pre-filled on open.</td></tr>
+            <tr><td><code>AddFolderModal</code></td><td>Create a new folder</td><td><code>onAddFolder(projectId, name)</code>, <code>projectId</code></td><td>Name must be non-empty/non-whitespace.</td></tr>
+            <tr><td><code>RenameFolderModal</code></td><td>Rename a folder</td><td><code>onRenameFolder(projectId, name)</code>, <code>currentName</code>, <code>projectId</code></td><td>Name must be non-empty. <code>currentName</code> is pre-filled on open.</td></tr>
+          </tbody>
+        </table></div>
+        <p>All four share the same pattern: Enter key submits when valid; primary button disabled when invalid; <code>null</code> rendered when <code>!isOpen</code>.</p>
+        <p><strong>Sources:</strong> <code>src/components/AddProjectModal.tsx</code>, <code>src/components/RenameProjectModal.tsx</code>, <code>src/components/AddFolderModal.tsx</code>, <code>src/components/RenameFolderModal.tsx</code></p>
+      </section>
+
+      <section>
+        <h2>4. Model modals</h2>
+
+        <h3>AddBPMNModelModal</h3>
+        <p>Used for both BPMN and DMN model creation (the calling component passes the appropriate <code>onAddModel</code> callback).</p>
+        <p><strong>Source:</strong> <code>src/components/AddBPMNModelModal.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>isOpen</code></td><td><code>boolean</code></td><td><span class="badge req">Yes</span></td><td>Controls visibility.</td></tr>
+            <tr><td><code>onClose</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Close callback.</td></tr>
+            <tr><td><code>onAddModel</code></td><td><code>(projectId: string, modelName: string) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Called with the new name on confirm.</td></tr>
+            <tr><td><code>projectId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Parent project for the new model.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Validation:</strong> Name must match <code>/^[a-zA-Z_][\w-.\s]*$/</code> (QName format — starts with a letter or <code>_</code>, then alphanumeric / <code>-</code> / <code>.</code> / space). Button disabled and Enter does not submit if name is blank or fails the regex.</p>
+
+        <h3>RenameModelModal</h3>
+        <p><strong>Source:</strong> <code>src/components/RenameModelModal.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>isOpen</code></td><td><code>boolean</code></td><td><span class="badge req">Yes</span></td><td>Controls visibility.</td></tr>
+            <tr><td><code>onClose</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Close callback.</td></tr>
+            <tr><td><code>onRenameModel</code></td><td><code>(newName: string) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Called with the new name on confirm.</td></tr>
+            <tr><td><code>currentName</code></td><td><code>string</code></td><td><span class="badge opt">No</span></td><td>Pre-fills the input on open.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Same QName validation as <code>AddBPMNModelModal</code>.</p>
+
+        <h3>MoveModelModal</h3>
+        <p><strong>Source:</strong> <code>src/components/MoveModelModal.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>isOpen</code></td><td><code>boolean</code></td><td><span class="badge req">Yes</span></td><td>Controls visibility.</td></tr>
+            <tr><td><code>onClose</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Close callback.</td></tr>
+            <tr><td><code>onMoveModel</code></td><td><code>(folderId: string | '') =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Called with target folder ID, or <code>''</code> for project root.</td></tr>
+            <tr><td><code>folders</code></td><td><code>{ id: string, name: string }[]</code></td><td><span class="badge req">Yes</span></td><td>Available target folders.</td></tr>
+            <tr><td><code>currentFolderId</code></td><td><code>string</code></td><td><span class="badge opt">No</span></td><td>Pre-selects the current folder; reset when <code>isOpen</code> changes.</td></tr>
+          </tbody>
+        </table></div>
+        <blockquote><p>The first option in the select is always "Project root (No Folder)" with an empty string value. <code>MoveModelModal</code> is the only modal without a <code>null</code> guard on <code>!isOpen</code>.</p></blockquote>
+      </section>
+
+      <section>
+        <h2>5. Collaboration modals</h2>
+
+        <h3>InviteModal</h3>
+        <p><strong>Source:</strong> <code>src/components/InviteModal.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>isOpen</code></td><td><code>boolean</code></td><td><span class="badge req">Yes</span></td><td>Controls visibility.</td></tr>
+            <tr><td><code>onClose</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Close callback.</td></tr>
+            <tr><td><code>projectId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Project to invite into.</td></tr>
+            <tr><td><code>userId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase <code>uid</code> of the sender.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Behaviour:</strong></p>
+        <ol>
+          <li>Email validated against <code>/^[^\s@]+@[^\s@]+\.[^\s@]+$/</code>; button disabled if invalid.</li>
+          <li>Before writing, queries <code>invitations</code> by <code>invitedEmail</code> and checks for an existing <code>Pending</code> entry for the same <code>projectId</code>. Blocks with a warning toast if found.</li>
+          <li>Also queries <code>users</code> by email; if found, checks <code>projects/{projectId}/members/{uid}</code>. Blocks if already a member.</li>
+          <li>Input value is normalised to lower-case on every keystroke.</li>
+        </ol>
+
+        <h3>MilestonesModal</h3>
+        <p><strong>Source:</strong> <code>src/components/MilestonesModal.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>isOpen</code></td><td><code>boolean</code></td><td><span class="badge req">Yes</span></td><td>Controls visibility.</td></tr>
+            <tr><td><code>onClose</code></td><td><code>() =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Close callback.</td></tr>
+            <tr><td><code>model</code></td><td><code>{ id: string, xmlData: string }</code></td><td><span class="badge req">Yes</span></td><td>The currently open model.</td></tr>
+            <tr><td><code>user</code></td><td><code>{ uid: string }</code></td><td><span class="badge req">Yes</span></td><td>Authenticated user.</td></tr>
+            <tr><td><code>onLoadMilestone</code></td><td><code>(xmlData: string) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Called with the milestone XML when user confirms a load.</td></tr>
+            <tr><td><code>changes</code></td><td><code>boolean</code></td><td><span class="badge opt">No</span></td><td>Passed in from parent; accepted but not currently read inside the component.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Behaviour:</strong></p>
+        <ul>
+          <li>Milestones are fetched from <code>milestones/{model.id}</code> when <code>isOpen</code> becomes true.</li>
+          <li>Displayed in a paginated table, 10 items per page, sorted newest-first.</li>
+          <li><strong>Loading a milestone</strong> enters a confirmation sub-view. The user sees a toggle "Save current state as milestone before loading" (defaults to <code>true</code>). If toggled on, the current <code>model.xmlData</code> is saved as <code>State before loading '{milestone.name}'</code> before <code>onLoadMilestone</code> is called.</li>
+          <li>The Save button is disabled while <code>isLoading</code> is true or the new milestone name is blank.</li>
+          <li>Form fields and page reset when the modal closes.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>6. Utility modals</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Component</th><th>Source</th><th>Props</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td><code>AddCommentModal</code></td><td><code>src/components/AddCommentModal.tsx</code></td><td><code>isOpen</code>, <code>onClose</code>, <code>onAddComment(text)</code></td><td>Textarea (4 rows). Button disabled when text is blank/whitespace. Text reset on cancel.</td></tr>
+            <tr><td><code>ConfirmationModal</code></td><td><code>src/components/ConfirmationModal.tsx</code></td><td><code>isOpen</code>, <code>message</code>, <code>onClose</code>, <code>onConfirm</code></td><td>Danger-styled confirm dialog. Generic — message supplied by caller.</td></tr>
+            <tr><td><code>SaveModal</code></td><td><code>src/components/SaveModal.tsx</code></td><td><code>isOpen</code>, <code>onSave</code>, <code>onDiscard</code></td><td>Prompts to save or discard unsaved BPMN/DMN changes before navigating away.</td></tr>
+            <tr><td><code>LogoutModal</code></td><td><code>src/components/LogoutModal.tsx</code></td><td><code>isOpen</code>, <code>onSaveAndLogout</code>, <code>onLogout</code>, <code>onClose</code>, <code>changes</code></td><td>When <code>changes</code> is true, shows Save + Logout and Discard + Logout. When false, shows a single Logout button. Custom non-Carbon modal.</td></tr>
+            <tr><td><code>ShareModal</code></td><td><code>src/components/ShareModal.tsx</code></td><td><code>isOpen</code>, <code>onClose</code>, <code>url</code></td><td>Read-only URL input. Copy button uses the Clipboard API; toastr on success/failure. Passive modal (no primary action).</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>How it fits together</h2>
+        <pre class="mermaid">
+flowchart TD
+    App --> BpmnModeler
+    App --> DmnModeler
+    App --> ProjectList
+    App --> SaveModal
+    App --> LogoutModal
+    App --> ShareModal_App["ShareModal (App-level)"]
+    App --> MilestonesModal
+    App --> AddCommentModal
+
+    ProjectList --> AddProjectModal
+    ProjectList --> RenameProjectModal
+    ProjectList --> AddBPMNModalBPMN["AddBPMNModelModal (BPMN)"]
+    ProjectList --> AddBPMNModalDMN["AddBPMNModelModal (DMN)"]
+    ProjectList --> RenameModelModal
+    ProjectList --> AddFolderModal
+    ProjectList --> RenameFolderModal
+    ProjectList --> MoveModelModal
+    ProjectList --> InviteModal
+    ProjectList --> ConfirmationModal
+        </pre>
+      </section>
+
+      <section>
+        <h2>Related code</h2>
+        <h3>Editor wrappers</h3>
+        <ul>
+          <li><code>src/components/BpmnModeler.tsx</code></li>
+          <li><code>src/components/DmnModeler.tsx</code></li>
+        </ul>
+        <h3>Main list / orchestration</h3>
+        <ul>
+          <li><code>src/components/ProjectList.tsx</code></li>
+        </ul>
+        <h3>Project &amp; folder modals</h3>
+        <ul>
+          <li><code>src/components/AddProjectModal.tsx</code></li>
+          <li><code>src/components/RenameProjectModal.tsx</code></li>
+          <li><code>src/components/AddFolderModal.tsx</code></li>
+          <li><code>src/components/RenameFolderModal.tsx</code></li>
+        </ul>
+        <h3>Model modals</h3>
+        <ul>
+          <li><code>src/components/AddBPMNModelModal.tsx</code></li>
+          <li><code>src/components/RenameModelModal.tsx</code></li>
+          <li><code>src/components/MoveModelModal.tsx</code></li>
+        </ul>
+        <h3>Collaboration modals</h3>
+        <ul>
+          <li><code>src/components/InviteModal.tsx</code></li>
+          <li><code>src/components/MilestonesModal.tsx</code></li>
+        </ul>
+        <h3>Utility modals</h3>
+        <ul>
+          <li><code>src/components/AddCommentModal.tsx</code></li>
+          <li><code>src/components/ConfirmationModal.tsx</code></li>
+          <li><code>src/components/SaveModal.tsx</code></li>
+          <li><code>src/components/LogoutModal.tsx</code></li>
+          <li><code>src/components/ShareModal.tsx</code></li>
+        </ul>
+      </section>
+    </main>
+    <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js" integrity="sha384-WmdflGW9aGfoBdHc4rRyWzYuAjEmDwMdGdiPNacbwfGKxBW/SO6guzuQ76qjnSlr" crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
