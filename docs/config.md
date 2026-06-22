@@ -153,16 +153,19 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `test:e2e:report` | `playwright show-report` | Opens the last HTML report. |
 | `screenshots` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"` | Captures documentation screenshots (the `screenshots` project) into `docs/assets/screenshots/`. Managed by the `capture-screenshots` skill. |
 
-**Authentication for tests:** the `demo-bpmn` project ID runs the emulators fully offline (no real credentials). The Playwright fixture `e2e/fixtures.ts` signs in via the `window.__E2E_AUTH__` hook (see §2) — creating a throwaway emulator user — so authenticated specs run as a logged-in user against an isolated, reset-each-run database. The pre-auth smoke tests (`e2e/sign-in.spec.ts`) need no sign-in.
+**Authentication for tests:** the `demo-bpmn` project ID runs the emulators fully offline (no real credentials). The Playwright fixture `e2e/fixtures.ts` signs in via the `window.__E2E_AUTH__` hook (see §2), creating a **unique throwaway user per test** (derived from the test ID). Because projects are scoped per user (`users/{uid}/projects`), each test runs against an empty, isolated dataset while keeping full parallelism; the emulator database is reset each run. The pre-auth smoke tests (`e2e/sign-in.spec.ts`) need no sign-in.
 
 **Test coverage:**
 
 | Spec | What it covers |
 |------|----------------|
 | `e2e/sign-in.spec.ts` | Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render. |
-| `e2e/projects.spec.ts` | After sign-in: the "Your Projects" view and Add Project action render. |
-| `e2e/project-crud.spec.ts` | Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test uses a unique name (`uniqueName` in `e2e/fixtures.ts`) so tests stay independent on the shared emulator database. |
+| `e2e/projects.spec.ts` | After sign-in: the "Your Projects" view and Add Project action render, and a fresh user starts with no projects (empty state) — relying on per-test user isolation. |
+| `e2e/project-crud.spec.ts` | Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test runs as its own user (per-test isolation, see below) so tests stay independent. |
 | `e2e/editor.spec.ts` | BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on `window.__E2E_BPMN__`), save it, and confirm the task persisted by reloading and re-reading the saved XML. |
+| `e2e/core-flows.spec.ts` | Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup `State before loading '<name>'` milestone is created). |
+| `e2e/validation.spec.ts` | Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered. |
+| `e2e/model-ops.spec.ts` | Model operations & persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via `.. / <folder>`), download a `.bpmn` file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the `autoSave` localStorage key). |
 
 **Documentation screenshots:** the `screenshots` Playwright project (run via `npm run screenshots`) captures UI images into `docs/assets/screenshots/`. Shots are defined in `e2e/screenshots/manifest.ts` and captured serially by `e2e/screenshots/capture.shots.ts` (toasts hidden, fixed names for deterministic images). This is driven by the `capture-screenshots` skill; the images are committed and embedded in the Markdown docs and their HTML twins.
 
@@ -223,6 +226,9 @@ flowchart TD
 - `e2e/projects.spec.ts`
 - `e2e/project-crud.spec.ts`
 - `e2e/editor.spec.ts`
+- `e2e/core-flows.spec.ts`
+- `e2e/validation.spec.ts`
+- `e2e/model-ops.spec.ts`
 - `e2e/screenshots/manifest.ts`
 - `e2e/screenshots/capture.shots.ts`
 

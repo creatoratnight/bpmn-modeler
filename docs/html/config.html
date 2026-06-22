@@ -172,15 +172,18 @@
             <tr><td><code>screenshots</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"</code></td><td>Captures documentation screenshots (the <code>screenshots</code> project) into <code>docs/assets/screenshots/</code>. Managed by the <code>capture-screenshots</code> skill.</td></tr>
           </tbody>
         </table></div>
-        <p><strong>Authentication for tests:</strong> the <code>demo-bpmn</code> project ID runs the emulators fully offline (no real credentials). The Playwright fixture <code>e2e/fixtures.ts</code> signs in via the <code>window.__E2E_AUTH__</code> hook (see §2) — creating a throwaway emulator user — so authenticated specs run as a logged-in user against an isolated, reset-each-run database. The pre-auth smoke tests (<code>e2e/sign-in.spec.ts</code>) need no sign-in.</p>
+        <p><strong>Authentication for tests:</strong> the <code>demo-bpmn</code> project ID runs the emulators fully offline (no real credentials). The Playwright fixture <code>e2e/fixtures.ts</code> signs in via the <code>window.__E2E_AUTH__</code> hook (see §2), creating a <strong>unique throwaway user per test</strong> (derived from the test ID). Because projects are scoped per user (<code>users/{uid}/projects</code>), each test runs against an empty, isolated dataset while keeping full parallelism; the emulator database is reset each run. The pre-auth smoke tests (<code>e2e/sign-in.spec.ts</code>) need no sign-in.</p>
         <p><strong>Test coverage:</strong></p>
         <div class="table-wrap"><table>
           <thead><tr><th>Spec</th><th>What it covers</th></tr></thead>
           <tbody>
             <tr><td><code>e2e/sign-in.spec.ts</code></td><td>Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render.</td></tr>
-            <tr><td><code>e2e/projects.spec.ts</code></td><td>After sign-in: the "Your Projects" view and Add Project action render.</td></tr>
-            <tr><td><code>e2e/project-crud.spec.ts</code></td><td>Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test uses a unique name (<code>uniqueName</code> in <code>e2e/fixtures.ts</code>) so tests stay independent on the shared emulator database.</td></tr>
+            <tr><td><code>e2e/projects.spec.ts</code></td><td>After sign-in: the "Your Projects" view and Add Project action render, and a fresh user starts with no projects (empty state) — relying on per-test user isolation.</td></tr>
+            <tr><td><code>e2e/project-crud.spec.ts</code></td><td>Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test runs as its own user (per-test isolation) so tests stay independent.</td></tr>
             <tr><td><code>e2e/editor.spec.ts</code></td><td>BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on <code>window.__E2E_BPMN__</code>), save it, and confirm the task persisted by reloading and re-reading the saved XML.</td></tr>
+            <tr><td><code>e2e/core-flows.spec.ts</code></td><td>Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup <code>State before loading '&lt;name&gt;'</code> milestone is created).</td></tr>
+            <tr><td><code>e2e/validation.spec.ts</code></td><td>Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered.</td></tr>
+            <tr><td><code>e2e/model-ops.spec.ts</code></td><td>Model operations &amp; persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via <code>.. / &lt;folder&gt;</code>), download a <code>.bpmn</code> file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the <code>autoSave</code> localStorage key).</td></tr>
           </tbody>
         </table></div>
         <p><strong>Documentation screenshots:</strong> the <code>screenshots</code> Playwright project (run via <code>npm run screenshots</code>) captures UI images into <code>docs/assets/screenshots/</code>. Shots are defined in <code>e2e/screenshots/manifest.ts</code> and captured serially by <code>e2e/screenshots/capture.shots.ts</code> (toasts hidden, fixed names for deterministic images). This is driven by the <code>capture-screenshots</code> skill; the images are committed and embedded in the Markdown docs and their HTML twins.</p>
@@ -244,6 +247,9 @@ flowchart TD
           <li><code>e2e/projects.spec.ts</code></li>
           <li><code>e2e/project-crud.spec.ts</code></li>
           <li><code>e2e/editor.spec.ts</code></li>
+          <li><code>e2e/core-flows.spec.ts</code></li>
+          <li><code>e2e/validation.spec.ts</code></li>
+          <li><code>e2e/model-ops.spec.ts</code></li>
           <li><code>e2e/screenshots/manifest.ts</code></li>
           <li><code>e2e/screenshots/capture.shots.ts</code></li>
         </ul>
