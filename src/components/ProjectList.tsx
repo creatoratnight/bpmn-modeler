@@ -38,6 +38,7 @@ import {
     sortRows
 } from '../services/utils.service.tsx';
 import {deleteModelsAndInvites} from '../services/projects.service.tsx';
+import {getModelMilestoneIds} from '../services/models.service.tsx';
 import AddFolderModal from './AddFolderModal.tsx';
 import RenameFolderModal from './RenameFolderModal.tsx';
 import MoveModelModal from "./MoveModelModal.tsx";
@@ -533,13 +534,17 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         setIsConfirmModalOpen(true);
     };
 
-    const onDeleteModel = (modelId) => {
+    const onDeleteModel = async (modelId) => {
         const db = getDatabase();
         const updates = {};
         updates[`/bpmnModels/${modelId}`] = null;
         updates[`/modelXmlData/${modelId}`] = null;
-        updates[`/milestones/${modelId}`] = null;
+        updates[`/milestones/${modelId}`] = null; // legacy pre-migration layout
         updates[`/projects/${currentProject.id}/models/${modelId}`] = null;
+
+        // Remove the milestones' XML snapshots, which live outside the model node.
+        const milestoneIds = await getModelMilestoneIds(modelId);
+        milestoneIds.forEach(id => { updates[`/milestoneData/${id}`] = null; });
 
         update(ref(db), updates).then(() => {
             updateLastChangedDate(currentProject.id);
@@ -551,15 +556,19 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         });
     }
 
-    const onBulkDeleteModels = (models) => {
+    const onBulkDeleteModels = async (models) => {
         const db = getDatabase();
         const updates = {};
-        models.forEach(model => {
+        for (const model of models) {
             updates[`bpmnModels/${model.id}`] = null;
             updates[`modelXmlData/${model.id}`] = null;
-            updates[`milestones/${model.id}`] = null;
+            updates[`milestones/${model.id}`] = null; // legacy pre-migration layout
             updates[`projects/${currentProject.id}/models/${model.id}`] = null;
-        });
+
+            // Remove the milestones' XML snapshots, which live outside the model node.
+            const milestoneIds = await getModelMilestoneIds(model.id);
+            milestoneIds.forEach(id => { updates[`milestoneData/${id}`] = null; });
+        }
 
         update(ref(db), updates).then(() => {
             updateLastChangedDate(currentProject.id);

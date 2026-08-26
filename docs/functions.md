@@ -93,8 +93,31 @@ Both functions rely on two environment variables that are resolved from `src/con
 | `npm run deploy` | Reads `projectId` from config, runs `firebase deploy --only functions --project {projectId}` |
 | `npm run emulate` | Runs `sync-config` then builds and starts the local Firebase Emulator |
 | `npm run test` | Runs `sync-config` (to inject env vars) then Jest |
+| `npm run migrate-milestones` | Runs the milestone data migration (see section 5) |
 
 **Source:** `functions/scripts/deploy.js`, `functions/scripts/sync-config.js`, `functions/scripts/start-emulator.js`
+
+---
+
+## 5. Milestone data migration
+
+A one-off data migration that moves milestones from the legacy layout (everything, including the XML snapshot, grouped under the model at `milestones/{modelId}/{milestoneId}`) to the split layout used by the app:
+
+| Path | Contents |
+|------|----------|
+| `bpmnModels/{modelId}/milestones/{milestoneId}` | Metadata: `name`, `description`, `createdBy`, `createdAt` |
+| `milestoneData/{milestoneId}/xmlData` | The XML snapshot, keyed by the same milestone ID |
+
+**Source:** `functions/scripts/migrate-milestones.js`
+
+- Uses `firebase-admin`; `projectId` / `databaseURL` are read from `src/config/.firebase.js` via `read-firebase-config.js`.
+- **Target:** set `FIREBASE_DATABASE_EMULATOR_HOST` to run against the emulator; otherwise provide Application Default Credentials (`GOOGLE_APPLICATION_CREDENTIALS`) to run against production.
+- **Idempotent:** milestone IDs are preserved, so re-running rewrites the same data; once the legacy `milestones/` node is gone a re-run is a no-op.
+
+| Flag | Effect |
+|------|--------|
+| `--dry-run` | Report the paths that would be written/deleted without writing anything. |
+| `--keep-legacy` | Leave the old `milestones/` node in place (default deletes it after copying). |
 
 ---
 
@@ -140,4 +163,5 @@ flowchart TD
 - `functions/scripts/read-firebase-config.js`
 - `functions/scripts/sync-config.js`
 - `functions/scripts/start-emulator.js`
+- `functions/scripts/migrate-milestones.js`
 - `functions/jest.setup.js`

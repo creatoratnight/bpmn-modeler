@@ -91,7 +91,9 @@ An optional grouping within a project. Folders are embedded directly inside the 
 
 ## 5. Milestone
 
-A named snapshot of a model's XML at a point in time. Used for lightweight version history.
+A named snapshot of a model's XML at a point in time. Used for lightweight version history. Stored in **two parts** so the milestone list can be rendered from the model data alone — the heavy XML snapshot is loaded only when a milestone is actually opened.
+
+### 5a. Milestone metadata
 
 **Source:** `src/services/models.service.tsx`
 
@@ -99,11 +101,26 @@ A named snapshot of a model's XML at a point in time. Used for lightweight versi
 |-------|------|----------|-------------|
 | `name` | `string` | Yes | User-given label for the milestone. |
 | `description` | `string` | Yes | Free-text description. |
-| `xmlData` | `string` | Yes | Full XML snapshot of the model at this point. |
 | `createdBy` | `string` | Yes | Firebase Auth `uid` of the user who saved the milestone. |
 | `createdAt` | `string` (ISO 8601) | Yes | Creation timestamp. |
 
-**RTDB path:** `milestones/{modelId}/{milestoneId}`
+**RTDB path:** `bpmnModels/{modelId}/milestones/{milestoneId}`
+
+Because the metadata lives under the model node, it is loaded together with the model and needs no separate read to list milestones.
+
+### 5b. Milestone XML data (`milestoneData`)
+
+The XML snapshot is stored separately, keyed by the milestone ID, and fetched on demand when a milestone is loaded (`getMilestoneXml`).
+
+**Source:** `src/services/models.service.tsx`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `xmlData` | `string` | Yes | Full XML snapshot of the model at this point. |
+
+**RTDB path:** `milestoneData/{milestoneId}/xmlData`
+
+> **Migration:** data in the legacy layout `milestones/{modelId}/{milestoneId}` (which embedded `xmlData` inline) is moved to this split layout by `functions/scripts/migrate-milestones.js`, preserving milestone IDs.
 
 ---
 
@@ -218,9 +235,12 @@ erDiagram
         string id
         string name
         string description
-        string xmlData
         string createdBy
         string createdAt
+    }
+    MILESTONE_XML {
+        string milestoneId
+        string xmlData
     }
     COMMENT {
         string id
@@ -242,7 +262,8 @@ erDiagram
     PROJECT ||--o{ FOLDER : "folders (embedded)"
     PROJECT }o--o{ USER : "members (role map)"
     MODEL ||--|| MODEL_XML : "xmlData (separate node)"
-    MODEL ||--o{ MILESTONE : "milestones"
+    MODEL ||--o{ MILESTONE : "milestones (metadata under model)"
+    MILESTONE ||--|| MILESTONE_XML : "xmlData (separate node)"
     MODEL ||--o{ COMMENT : "comments"
     MODEL }o--o| FOLDER : "optional folder"
     PROJECT ||--o{ INVITATION : "invitations"

@@ -1,7 +1,7 @@
 import './App.css'
 import BPMNModelerComponent from "./components/BpmnModeler.tsx";
 import {auth} from './config/.firebase.js';
-import {saveBPMNModel, saveDMNodel, getComments, saveComment, deleteComment} from './services/models.service.tsx'
+import {saveBPMNModel, saveDMNodel, getComments, saveComment, deleteComment, migrateMilestones} from './services/models.service.tsx'
 import {signInWithGoogle, signInWithMicrosoft, logout} from './services/user.service.tsx';
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState, useRef, useCallback } from "react";
@@ -10,7 +10,7 @@ import SaveModal from "./components/SaveModal.tsx";
 import LogoutModal from "./components/LogoutModal.tsx";
 import DMNModelerComponent from "./components/DmnModeler.tsx";
 import toastr from 'toastr';
-import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile} from '@carbon/react';
+import {Button, OverflowMenu, OverflowMenuItem, Toggle, Tile, Modal} from '@carbon/react';
 import {Save, Login, Download, Image as PNG, OpenPanelLeft, Folder, DecisionTree, TableSplit, FolderParent, RightPanelOpen, SidePanelOpen, SidePanelClose, Share, Flag, Chat, TrashCan} from '@carbon/react/icons';
 import { child, get, getDatabase, ref, set, query, orderByChild, equalTo } from 'firebase/database';
 import { FaGoogle, FaMicrosoft } from 'react-icons/fa';
@@ -49,6 +49,8 @@ function App() {
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState(false);
+    const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
+    const [isMigrating, setIsMigrating] = useState(false);
     const [shareUrl, setShareUrl] = useState('');
     const [userAvatar, setUserAvatar] = useState('user.png');
     const [isCommentsPanelOpen, setIsCommentsPanelOpen] = useState(() => {
@@ -76,6 +78,9 @@ function App() {
     const folderRef = useRef(folder);
     const fetchingModelIdRef = useRef(null);
     const isResizingRef = useRef(false);
+    // Set when a folder/up navigation originates from the in-editor side panel,
+    // which is a quick-nav menu: it should re-scope the panel but stay in the modeler.
+    const sidePanelNavRef = useRef(false);
 
     useEffect(() => {
         autoSaveRef.current = autoSave;
@@ -307,6 +312,12 @@ function App() {
     useEffect(() => {
         if (!user || !isProjectsLoaded) return;
 
+        // Consume the side-panel navigation intent (one-shot): when set, a
+        // folder/up navigation should keep the editor open instead of dropping
+        // to the project view.
+        const fromSidePanel = sidePanelNavRef.current;
+        sidePanelNavRef.current = false;
+
         const path = location.pathname;
         if (path === '/' || path === '') {
             if (viewMode !== 'ALL_PROJECTS') {
@@ -335,8 +346,12 @@ function App() {
                 const f = p.folders?.find(f => f.name === decodedFolderName);
                 if (f) {
                     if (folderRef.current !== f) setfolder(f);
-                    if (modelRef.current?.id) setModel({});
-                    if (viewMode !== 'BPMN' && viewMode !== 'DMN') {
+                    // From the side panel (quick nav): re-scope the panel to this
+                    // folder but keep the current model open in the editor.
+                    const keepModeler = fromSidePanel && (viewMode === 'BPMN' || viewMode === 'DMN');
+                    if (!keepModeler) {
+                        if (modelRef.current?.id) setModel({});
+                        // No model in the URL — this is the project's folder view.
                         if (viewMode !== 'PROJECT') setViewMode('PROJECT');
                     }
                 } else {
@@ -390,8 +405,13 @@ function App() {
                 }
             } else {
                 if (folderRef.current?.id) setfolder({});
-                if (modelRef.current?.id) setModel({});
-                if (viewMode !== 'BPMN' && viewMode !== 'DMN') {
+                // From the side panel (quick nav): re-scope to the project root but
+                // keep the current model open in the editor.
+                const keepModeler = fromSidePanel && (viewMode === 'BPMN' || viewMode === 'DMN');
+                if (!keepModeler) {
+                    if (modelRef.current?.id) setModel({});
+                    // The URL is the project root (no folder, no model) — show the
+                    // project view, including when navigating back from the editor.
                     if (viewMode !== 'PROJECT') setViewMode('PROJECT');
                 }
             }
@@ -593,6 +613,8 @@ function App() {
 
         let path = '';
         if (item.type === 'folder' || item.type === 'folderUp') {
+            // Quick-nav within the editor: re-scope the side panel, stay in the modeler.
+            sidePanelNavRef.current = true;
             if (item.type === 'folderUp') {
                 path = '/project/' + encodeURIComponent(project.name);
             } else {
@@ -612,6 +634,24 @@ function App() {
             getComments(model.id).then(setComments);
         } catch (error) {
             toastr.error('Failed to add comment');
+        }
+    };
+
+    const handleMigrateMilestones = async () => {
+        setIsMigrating(true);
+        try {
+            const { models, milestones } = await migrateMilestones();
+            if (milestones === 0) {
+                toastr.info('No milestones needed migrating — everything is already up to date.');
+            } else {
+                toastr.success(`Migrated ${milestones} milestone(s) across ${models} model(s).`);
+            }
+            setIsMigrateModalOpen(false);
+        } catch (error) {
+            console.error('Milestone migration failed: ', error);
+            toastr.error('Milestone migration failed. Check the console for details.');
+        } finally {
+            setIsMigrating(false);
         }
     };
 
@@ -663,6 +703,26 @@ function App() {
               onClose={() => setIsAddCommentModalOpen(false)}
               onAddComment={handleAddComment}
           />
+          <Modal
+              open={isMigrateModalOpen}
+              modalHeading="Migrate milestones"
+              primaryButtonText={isMigrating ? 'Migrating…' : 'Run migration'}
+              secondaryButtonText="Cancel"
+              primaryButtonDisabled={isMigrating}
+              onRequestClose={() => { if (!isMigrating) setIsMigrateModalOpen(false); }}
+              onRequestSubmit={handleMigrateMilestones}
+          >
+              <p style={{ marginBottom: '1rem' }}>
+                  This moves every milestone from the old storage layout to the new one: milestone
+                  details are stored on each model and the diagram snapshots are stored separately so
+                  the list loads faster.
+              </p>
+              <p>
+                  It runs across all models you can access, is safe to run more than once, and removes
+                  the old milestone data once it has been copied. Make sure everyone has the latest
+                  version of the app before running it.
+              </p>
+          </Modal>
           <Tile className="header">
               <div className="header-logo">
                   <img src="/valtimo-designer-logo.png" alt="valtimo academy logo"/>
@@ -710,6 +770,13 @@ function App() {
                           }}/>
                           Welcome, {user.displayName}
                           <OverflowMenu flipped>
+                              <OverflowMenuItem
+                                  itemText="Migrate milestones"
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsMigrateModalOpen(true);
+                                  }}
+                              />
                               <OverflowMenuItem
                                   itemText="Logout"
                                   isDelete

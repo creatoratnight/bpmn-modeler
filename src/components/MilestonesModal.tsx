@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, TextInput, Button, DataTable, TableContainer, Table, TableHead, TableRow, TableHeader, TableBody, TableCell, Pagination, Toggle } from '@carbon/react';
-import { saveMilestone, getMilestones, deleteMilestone } from '../services/models.service.tsx';
+import { saveMilestone, getMilestones, deleteMilestone, getMilestoneXml } from '../services/models.service.tsx';
 import { convertDateString } from '../services/utils.service.tsx';
 import toastr from 'toastr';
 import ConfirmationModal from "./ConfirmationModal.tsx";
@@ -95,6 +95,19 @@ const MilestonesModal = ({ isOpen, onClose, model, user, onLoadMilestone, change
                     setSaveCurrentAsMilestone(true);
                 }}
                 onRequestSubmit={async () => {
+                    // Fetch the milestone's XML on demand — the list only holds metadata.
+                    let milestoneXml;
+                    try {
+                        milestoneXml = await getMilestoneXml(confirmLoadMilestone.id);
+                    } catch (error) {
+                        toastr.error('Failed to load milestone data');
+                        return;
+                    }
+                    if (!milestoneXml) {
+                        toastr.error('Milestone data could not be found');
+                        return;
+                    }
+
                     if (saveCurrentAsMilestone) {
                         const autoName = `State before loading '${confirmLoadMilestone.name}'`;
                         try {
@@ -104,7 +117,7 @@ const MilestonesModal = ({ isOpen, onClose, model, user, onLoadMilestone, change
                             toastr.error('Failed to backup current state');
                         }
                     }
-                    onLoadMilestone(confirmLoadMilestone.xmlData);
+                    onLoadMilestone(milestoneXml);
                     setConfirmLoadMilestone(null);
                     setSaveCurrentAsMilestone(true);
                     onClose();

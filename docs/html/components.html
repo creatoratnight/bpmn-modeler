@@ -195,9 +195,9 @@
         </table></div>
         <p><strong>Behaviour:</strong></p>
         <ul>
-          <li>Milestones are fetched from <code>milestones/{model.id}</code> when <code>isOpen</code> becomes true.</li>
+          <li>Milestone metadata (name, description, date) is fetched from <code>bpmnModels/{model.id}/milestones</code> when <code>isOpen</code> becomes true. The heavy XML snapshots are not loaded for the list.</li>
           <li>Displayed in a paginated table, 10 items per page, sorted newest-first.</li>
-          <li><strong>Loading a milestone</strong> enters a confirmation sub-view. The user sees a toggle "Save current state as milestone before loading" (defaults to <code>true</code>). If toggled on, the current <code>model.xmlData</code> is saved as <code>State before loading '{milestone.name}'</code> before <code>onLoadMilestone</code> is called.</li>
+          <li><strong>Loading a milestone</strong> enters a confirmation sub-view. On confirm, the milestone's XML is fetched on demand via <code>getMilestoneXml(milestone.id)</code>; if it cannot be found the load is aborted with an error toast. The user also sees a toggle "Save current state as milestone before loading" (defaults to <code>true</code>). If toggled on, the current <code>model.xmlData</code> is saved as <code>State before loading '{milestone.name}'</code> before <code>onLoadMilestone</code> is called with the fetched XML.</li>
           <li>The Save button is disabled while <code>isLoading</code> is true or the new milestone name is blank.</li>
           <li>Form fields and page reset when the modal closes.</li>
         </ul>

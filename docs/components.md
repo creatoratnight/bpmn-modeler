@@ -190,9 +190,9 @@ Same QName validation as `AddBPMNModelModal`.
 | `changes` | `boolean` | No | Passed in from parent; accepted but not currently read inside the component. |
 
 **Behaviour:**
-- Milestones are fetched from `milestones/{model.id}` when `isOpen` becomes true.
+- Milestone metadata (name, description, date) is fetched from `bpmnModels/{model.id}/milestones` when `isOpen` becomes true. The heavy XML snapshots are not loaded for the list.
 - Displayed in a paginated table, 10 items per page, sorted newest-first.
-- **Loading a milestone** enters a confirmation sub-view. The user sees a toggle "Save current state as milestone before loading" (defaults to `true`). If toggled on, the current `model.xmlData` is saved as `State before loading '{milestone.name}'` before `onLoadMilestone` is called.
+- **Loading a milestone** enters a confirmation sub-view. On confirm, the milestone's XML is fetched on demand via `getMilestoneXml(milestone.id)`; if it cannot be found the load is aborted with an error toast. The user also sees a toggle "Save current state as milestone before loading" (defaults to `true`). If toggled on, the current `model.xmlData` is saved as `State before loading '{milestone.name}'` before `onLoadMilestone` is called with the fetched XML.
 - The Save button is disabled while `isLoading` is true or the new milestone name is blank.
 - Form fields and page reset when the modal closes.
 

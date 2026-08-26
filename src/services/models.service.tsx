@@ -4,14 +4,14 @@ export const saveBPMNModel = (model) => {
     const db = getDatabase();
     const updates = {};
 
-    updates[`/bpmnModels/${model.id}`] = {
-        name: model.name,
-        type: 'bpmn',
-        ownerId: model.ownerId,
-        folder: model.folder || null,
-        projectId: model.projectId,
-        updatedAt: new Date().toISOString()
-    };
+    // Update individual fields rather than replacing the whole node, so that the
+    // `milestones` child stored under the model is preserved across saves.
+    updates[`/bpmnModels/${model.id}/name`] = model.name;
+    updates[`/bpmnModels/${model.id}/type`] = 'bpmn';
+    updates[`/bpmnModels/${model.id}/ownerId`] = model.ownerId;
+    updates[`/bpmnModels/${model.id}/folder`] = model.folder || null;
+    updates[`/bpmnModels/${model.id}/projectId`] = model.projectId;
+    updates[`/bpmnModels/${model.id}/updatedAt`] = new Date().toISOString();
     updates[`/modelXmlData/${model.id}/xmlData`] = model.xmlData;
 
     return update(ref(db), updates).then(() => {
@@ -25,13 +25,13 @@ export const saveDMNodel = (model) => {
     const db = getDatabase();
     const updates = {};
 
-    updates[`/bpmnModels/${model.id}`] = {
-        name: model.name,
-        type: 'dmn',
-        ownerId: model.ownerId,
-        projectId: model.projectId,
-        updatedAt: new Date().toISOString()
-    };
+    // Update individual fields rather than replacing the whole node, so that the
+    // `milestones` child stored under the model is preserved across saves.
+    updates[`/bpmnModels/${model.id}/name`] = model.name;
+    updates[`/bpmnModels/${model.id}/type`] = 'dmn';
+    updates[`/bpmnModels/${model.id}/ownerId`] = model.ownerId;
+    updates[`/bpmnModels/${model.id}/projectId`] = model.projectId;
+    updates[`/bpmnModels/${model.id}/updatedAt`] = new Date().toISOString();
     updates[`/modelXmlData/${model.id}/xmlData`] = model.xmlData;
 
     return update(ref(db), updates).then(() => {
@@ -41,24 +41,33 @@ export const saveDMNodel = (model) => {
     });
 };
 
+// Milestones are stored as two parts:
+//   - lightweight metadata under the model:  bpmnModels/{modelId}/milestones/{milestoneId}
+//   - the heavy XML snapshot on its own:      milestoneData/{milestoneId}/xmlData
+// This lets the list be shown from the model data alone (name/description/date),
+// while the XML is only fetched when a milestone is actually loaded.
 export const saveMilestone = async (modelId, name, description, xmlData, userId) => {
     const db = getDatabase();
-    const newMilestoneRef = push(ref(db, `milestones/${modelId}`));
-    
-    return set(newMilestoneRef, {
+    const milestoneId = push(ref(db, `milestoneData`)).key;
+
+    const updates = {};
+    updates[`/bpmnModels/${modelId}/milestones/${milestoneId}`] = {
         name,
         description,
-        xmlData,
         createdBy: userId,
         createdAt: new Date().toISOString()
-    });
+    };
+    updates[`/milestoneData/${milestoneId}/xmlData`] = xmlData;
+
+    await update(ref(db), updates);
+    return milestoneId;
 };
 
 export const getMilestones = async (modelId) => {
     const db = getDatabase();
-    const milestonesRef = ref(db, `milestones/${modelId}`);
+    const milestonesRef = ref(db, `bpmnModels/${modelId}/milestones`);
     const snapshot = await get(milestonesRef);
-    
+
     if (snapshot.exists()) {
         const data = snapshot.val();
         return Object.keys(data).map(key => ({
@@ -69,10 +78,80 @@ export const getMilestones = async (modelId) => {
     return [];
 };
 
+// Fetch the XML snapshot for a single milestone on demand (loaded only when needed).
+export const getMilestoneXml = async (milestoneId) => {
+    const db = getDatabase();
+    const snapshot = await get(ref(db, `milestoneData/${milestoneId}/xmlData`));
+    return snapshot.exists() ? snapshot.val() : null;
+};
+
+// The milestone ids for a model, used to clean up their XML data on cascade deletes.
+export const getModelMilestoneIds = async (modelId) => {
+    const db = getDatabase();
+    const snapshot = await get(ref(db, `bpmnModels/${modelId}/milestones`));
+    return snapshot.exists() ? Object.keys(snapshot.val()) : [];
+};
+
 export const deleteMilestone = async (modelId, milestoneId) => {
     const db = getDatabase();
-    const milestoneRef = ref(db, `milestones/${modelId}/${milestoneId}`);
-    return remove(milestoneRef);
+    const updates = {};
+    updates[`/bpmnModels/${modelId}/milestones/${milestoneId}`] = null;
+    updates[`/milestoneData/${milestoneId}`] = null;
+    return update(ref(db), updates);
+};
+
+// One-off migration from the legacy layout — where every milestone (including its
+// XML snapshot) was grouped under the model at `milestones/{modelId}/{milestoneId}` —
+// to the split layout used by the app:
+//   - bpmnModels/{modelId}/milestones/{milestoneId}  (metadata)
+//   - milestoneData/{milestoneId}/xmlData            (snapshot)
+// Runs client-side with the signed-in user's permissions. Milestone ids are
+// preserved, so it is idempotent: re-running rewrites the same data, and once the
+// legacy `milestones/` node is gone it is a no-op. Returns a summary of what moved.
+export const migrateMilestones = async ({ keepLegacy = false } = {}) => {
+    const db = getDatabase();
+    const legacySnapshot = await get(ref(db, 'milestones'));
+
+    if (!legacySnapshot.exists()) {
+        return { models: 0, milestones: 0 };
+    }
+
+    const legacy = legacySnapshot.val();
+    const updates = {};
+    let models = 0;
+    let milestones = 0;
+
+    for (const modelId of Object.keys(legacy)) {
+        const modelMilestones = legacy[modelId];
+        if (!modelMilestones || typeof modelMilestones !== 'object') continue;
+
+        models += 1;
+
+        for (const milestoneId of Object.keys(modelMilestones)) {
+            const { name, description, xmlData, createdBy, createdAt } = modelMilestones[milestoneId] || {};
+
+            updates[`/bpmnModels/${modelId}/milestones/${milestoneId}`] = {
+                name: name ?? null,
+                description: description ?? null,
+                createdBy: createdBy ?? null,
+                createdAt: createdAt ?? null
+            };
+            updates[`/milestoneData/${milestoneId}/xmlData`] = xmlData ?? null;
+
+            milestones += 1;
+        }
+
+        if (!keepLegacy) {
+            updates[`/milestones/${modelId}`] = null;
+        }
+    }
+
+    if (milestones === 0) {
+        return { models, milestones: 0 };
+    }
+
+    await update(ref(db), updates);
+    return { models, milestones };
 };
 
 export const saveComment = async (modelId, text, user) => {
