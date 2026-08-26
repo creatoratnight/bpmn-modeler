@@ -28,12 +28,18 @@
         <div class="table-wrap"><table>
           <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
           <tbody>
-            <tr><td><code>/bpmnModels/{model.id}</code></td><td><code>name</code>, <code>type: 'bpmn'</code>, <code>ownerId</code>, <code>folder</code> (or <code>null</code>), <code>projectId</code>, <code>updatedAt</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/name</code></td><td><code>model.name</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/type</code></td><td><code>'bpmn'</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/ownerId</code></td><td><code>model.ownerId</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/folder</code></td><td><code>model.folder</code> (or <code>null</code>)</td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/projectId</code></td><td><code>model.projectId</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/updatedAt</code></td><td><code>new Date().toISOString()</code></td></tr>
             <tr><td><code>/modelXmlData/{model.id}/xmlData</code></td><td><code>model.xmlData</code></td></tr>
           </tbody>
         </table></div>
         <p><strong>Notes:</strong></p>
         <ul>
+          <li>Fields are written <strong>individually</strong> rather than by replacing the whole <code>bpmnModels/{model.id}</code> node. This preserves the <code>milestones</code> child stored under the model (see <a href="projects.html">Milestone metadata</a>), which a whole-node replacement would delete.</li>
           <li><code>folder</code> is set to <code>model.folder || null</code> — a missing folder is stored as <code>null</code>, not omitted.</li>
           <li><code>updatedAt</code> is set to <code>new Date().toISOString()</code> on every call. <code>createdAt</code> is not written on save; it is set only at creation time and preserved on subsequent saves.</li>
           <li>Returns <code>Promise&lt;void&gt;</code>; logs success to the console.</li>
@@ -44,33 +50,45 @@
         <div class="table-wrap"><table>
           <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
           <tbody>
-            <tr><td><code>/bpmnModels/{model.id}</code></td><td><code>name</code>, <code>type: 'dmn'</code>, <code>ownerId</code>, <code>projectId</code>, <code>updatedAt</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/name</code></td><td><code>model.name</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/type</code></td><td><code>'dmn'</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/ownerId</code></td><td><code>model.ownerId</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/projectId</code></td><td><code>model.projectId</code></td></tr>
+            <tr><td><code>/bpmnModels/{model.id}/updatedAt</code></td><td><code>new Date().toISOString()</code></td></tr>
             <tr><td><code>/modelXmlData/{model.id}/xmlData</code></td><td><code>model.xmlData</code></td></tr>
           </tbody>
         </table></div>
         <p><strong>Notes:</strong></p>
         <ul>
+          <li>Like <code>saveBPMNModel</code>, fields are written individually so the model's <code>milestones</code> child is preserved across saves.</li>
           <li>Unlike <code>saveBPMNModel</code>, no <code>folder</code> field is written — DMN models do not track folder placement in this function.</li>
           <li>Returns <code>Promise&lt;void&gt;</code>.</li>
         </ul>
 
         <h3>saveMilestone(modelId, name, description, xmlData, userId)</h3>
-        <p>Pushes a new milestone under <code>milestones/{modelId}</code> using <code>push</code> (Firebase auto-generated key).</p>
+        <p>Generates a milestone ID (<code>push(ref(db, 'milestoneData')).key</code>) and writes the milestone in <strong>two parts</strong> in a single multi-path <code>update</code> call: lightweight metadata under the model, and the XML snapshot separately.</p>
         <div class="table-wrap"><table>
           <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
           <tbody>
-            <tr><td><code>milestones/{modelId}/{autoKey}</code></td><td><code>name</code>, <code>description</code>, <code>xmlData</code>, <code>createdBy: userId</code>, <code>createdAt</code></td></tr>
+            <tr><td><code>/bpmnModels/{modelId}/milestones/{milestoneId}</code></td><td><code>name</code>, <code>description</code>, <code>createdBy: userId</code>, <code>createdAt</code></td></tr>
+            <tr><td><code>/milestoneData/{milestoneId}/xmlData</code></td><td><code>xmlData</code></td></tr>
           </tbody>
         </table></div>
-        <p>Returns <code>Promise&lt;void&gt;</code>.</p>
+        <p>Returns <code>Promise&lt;string&gt;</code> — the generated <code>milestoneId</code>.</p>
 
         <h3>getMilestones(modelId): Promise&lt;Milestone[]&gt;</h3>
-        <p>Reads the full <code>milestones/{modelId}</code> subtree in a single <code>get</code> call and returns items sorted <strong>newest-first</strong> by <code>createdAt</code>.</p>
-        <p><strong>Returned shape per item:</strong> <code>{ id: key, name, description, xmlData, createdBy, createdAt }</code></p>
+        <p>Reads the metadata subtree <code>bpmnModels/{modelId}/milestones</code> in a single <code>get</code> call and returns items sorted <strong>newest-first</strong> by <code>createdAt</code>. The XML snapshots are <strong>not</strong> loaded here.</p>
+        <p><strong>Returned shape per item:</strong> <code>{ id: key, name, description, createdBy, createdAt }</code></p>
         <p>Returns <code>[]</code> if the path does not exist.</p>
 
+        <h3>getMilestoneXml(milestoneId): Promise&lt;string | null&gt;</h3>
+        <p>Fetches a single milestone's XML snapshot on demand from <code>milestoneData/{milestoneId}/xmlData</code>. Returns <code>null</code> if the path does not exist. Called when a milestone is actually loaded, so the list view never has to read the heavy XML.</p>
+
+        <h3>getModelMilestoneIds(modelId): Promise&lt;string[]&gt;</h3>
+        <p>Returns the milestone IDs for a model by reading the keys of <code>bpmnModels/{modelId}/milestones</code>. Used by cascade deletes to clean up the associated <code>milestoneData/{milestoneId}</code> entries, which live outside the model node. Returns <code>[]</code> if the model has no milestones.</p>
+
         <h3>deleteMilestone(modelId, milestoneId)</h3>
-        <p>Removes <code>milestones/{modelId}/{milestoneId}</code>. Returns <code>Promise&lt;void&gt;</code>.</p>
+        <p>Removes both parts of a milestone in a single multi-path <code>update</code>: the metadata at <code>/bpmnModels/{modelId}/milestones/{milestoneId}</code> and the snapshot at <code>/milestoneData/{milestoneId}</code>. Returns <code>Promise&lt;void&gt;</code>.</p>
 
         <h3>saveComment(modelId, text, user)</h3>
         <p>Pushes a new comment under <code>comments/{modelId}</code> using <code>push</code>.</p>
@@ -140,12 +158,13 @@
         <div class="table-wrap"><table>
           <thead><tr><th>Step</th><th>RTDB query</th><th>Removals per matched key</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td><code>bpmnModels</code> where <code>projectId == projectId</code></td><td><code>bpmnModels/{key}</code>, <code>modelXmlData/{key}</code>, <code>milestones/{key}</code></td></tr>
+            <tr><td>1</td><td><code>bpmnModels</code> where <code>projectId == projectId</code></td><td><code>bpmnModels/{key}</code> (includes the model's milestone metadata child), <code>modelXmlData/{key}</code>, <code>milestones/{key}</code> (legacy pre-migration layout), and <code>milestoneData/{milestoneId}</code> for each milestone under the model</td></tr>
             <tr><td>2</td><td><code>invitations</code> where <code>projectId == projectId</code></td><td><code>invitations/{key}</code></td></tr>
           </tbody>
         </table></div>
         <p><strong>Validation / edge cases:</strong></p>
         <ul>
+          <li>The milestone XML snapshots (<code>milestoneData/{milestoneId}</code>) live outside the model node, so they are removed explicitly using the milestone IDs read from each model's <code>milestones</code> child.</li>
           <li><code>comments/{key}</code> is <strong>not</strong> removed — comments are not cleaned up on project deletion.</li>
           <li>Individual <code>remove</code> calls inside the <code>forEach</code> are fire-and-forget (no <code>await</code>); the returned promise resolves when the queries complete, not when all removes do.</li>
         </ul>
@@ -225,7 +244,7 @@ flowchart TD
     A --> E[utils.service.tsx]
 
     B -->|RTDB update| F["/bpmnModels/{id}\n/modelXmlData/{id}"]
-    B -->|RTDB push/get/remove| G["milestones/{modelId}"]
+    B -->|RTDB update/get| G["bpmnModels/{modelId}/milestones\nmilestoneData/{milestoneId}"]
     B -->|RTDB push/get/remove| H["comments/{modelId}"]
 
     C -->|RTDB set/get| I["users/{uid}"]
@@ -235,7 +254,7 @@ flowchart TD
     J -.->|cross-link| K
     K -.->|cross-link| J
 
-    D -->|RTDB query + remove| M["bpmnModels\nmodelXmlData\nmilestones\ninvitations"]
+    D -->|RTDB query + remove| M["bpmnModels\nmodelXmlData\nmilestones (legacy)\nmilestoneData\ninvitations"]
 
     E -->|Browser Blob + a| N[File download]
     E --> O["camelize / toKebabCase\nconvertDateString / sortRows"]

@@ -102,19 +102,33 @@
 
       <section>
         <h2>5. Milestone</h2>
-        <p>A named snapshot of a model's XML at a point in time. Used for lightweight version history.</p>
+        <p>A named snapshot of a model's XML at a point in time. Used for lightweight version history. Stored in <strong>two parts</strong> so the milestone list can be rendered from the model data alone — the heavy XML snapshot is loaded only when a milestone is actually opened.</p>
+
+        <h3>5a. Milestone metadata</h3>
         <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
         <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>name</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>User-given label for the milestone.</td></tr>
             <tr><td><code>description</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Free-text description.</td></tr>
-            <tr><td><code>xmlData</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Full XML snapshot of the model at this point.</td></tr>
             <tr><td><code>createdBy</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Firebase Auth <code>uid</code> of the user who saved the milestone.</td></tr>
             <tr><td><code>createdAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>Creation timestamp.</td></tr>
           </tbody>
         </table></div>
-        <p><strong>RTDB path:</strong> <code>milestones/{modelId}/{milestoneId}</code></p>
+        <p><strong>RTDB path:</strong> <code>bpmnModels/{modelId}/milestones/{milestoneId}</code></p>
+        <p>Because the metadata lives under the model node, it is loaded together with the model and needs no separate read to list milestones.</p>
+
+        <h3>5b. Milestone XML data (<code>milestoneData</code>)</h3>
+        <p>The XML snapshot is stored separately, keyed by the milestone ID, and fetched on demand when a milestone is loaded (<code>getMilestoneXml</code>).</p>
+        <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>xmlData</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Full XML snapshot of the model at this point.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>RTDB path:</strong> <code>milestoneData/{milestoneId}/xmlData</code></p>
+        <blockquote><strong>Migration:</strong> data in the legacy layout <code>milestones/{modelId}/{milestoneId}</code> (which embedded <code>xmlData</code> inline) is moved to this split layout by <code>functions/scripts/migrate-milestones.js</code>, preserving milestone IDs.</blockquote>
       </section>
 
       <section>
@@ -233,9 +247,12 @@ erDiagram
         string id
         string name
         string description
-        string xmlData
         string createdBy
         string createdAt
+    }
+    MILESTONE_XML {
+        string milestoneId
+        string xmlData
     }
     COMMENT {
         string id
@@ -257,7 +274,8 @@ erDiagram
     PROJECT ||--o{ FOLDER : "folders (embedded)"
     PROJECT }o--o{ USER : "members (role map)"
     MODEL ||--|| MODEL_XML : "xmlData (separate node)"
-    MODEL ||--o{ MILESTONE : "milestones"
+    MODEL ||--o{ MILESTONE : "milestones (metadata under model)"
+    MILESTONE ||--|| MILESTONE_XML : "xmlData (separate node)"
     MODEL ||--o{ COMMENT : "comments"
     MODEL }o--o| FOLDER : "optional folder"
     PROJECT ||--o{ INVITATION : "invitations"

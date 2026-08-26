@@ -8,7 +8,16 @@ export async function deleteModelsAndInvites(projectId) {
     modelsSnapshot.forEach((childSnapshot) => {
         remove(ref(db, `bpmnModels/${childSnapshot.key}`));
         remove(ref(db, `modelXmlData/${childSnapshot.key}`));
-        remove(ref(db, `milestones/${childSnapshot.key}`));
+        remove(ref(db, `milestones/${childSnapshot.key}`)); // legacy pre-migration layout
+
+        // Milestone metadata lives under the model node (removed above), but the
+        // XML snapshots live separately under milestoneData/{milestoneId}.
+        const milestones = childSnapshot.child('milestones');
+        if (milestones.exists()) {
+            milestones.forEach((milestoneSnapshot) => {
+                remove(ref(db, `milestoneData/${milestoneSnapshot.key}`));
+            });
+        }
     });
 
     const invitesQuery = query(ref(db, 'invitations'), orderByChild('projectId'), equalTo(projectId));

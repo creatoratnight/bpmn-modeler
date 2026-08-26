@@ -125,6 +125,51 @@ test.describe('Model operations', () => {
     await expect(page.getByText('Persisted').first()).toBeVisible();
   });
 
+  test('returns to the project view from the editor breadcrumb', async ({ page }) => {
+    const project = uniqueName('Breadcrumb');
+    await createProject(page, project);
+    await openProject(page, project);
+    await addBpmnModel(page, 'SomeModel');
+    await openModelEditor(page, 'SomeModel');
+
+    // Click the project name in the top breadcrumb to leave the editor.
+    await page.locator('.nav-project', { hasText: project }).click();
+
+    // Back in the project view: the editor is gone and the models list is shown.
+    await expect(page.locator('.bpmn-modeler')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Add BPMN/i }).first()).toBeVisible();
+    await expect(page.getByText('SomeModel', { exact: true }).first()).toBeVisible();
+  });
+
+  test('stays in the modeler when navigating folders via the side panel', async ({ page }) => {
+    const project = uniqueName('SidePanelNav');
+    await createProject(page, project);
+    await openProject(page, project);
+    await addFolder(page, 'Sub');
+    await addBpmnModel(page, 'RootDoc');
+    // Add a model inside the folder.
+    await page.getByText('Sub', { exact: true }).first().click();
+    await addBpmnModel(page, 'SubDoc');
+    await page.getByText(/\.\. \//).first().click();
+
+    // Open the root model, then open the side panel (closed by default).
+    await openModelEditor(page, 'RootDoc');
+    await page.getByRole('button', { name: 'Open project panel' }).click();
+    await expect(page.locator('.nav-model')).toHaveText('RootDoc');
+
+    // Click the folder in the side panel: stay in the editor, re-scope the panel,
+    // and keep the same model open.
+    await page.getByTitle('Sub', { exact: true }).click();
+    await expect(page.locator('.bpmn-modeler')).toBeVisible();
+    await expect(page.locator('.nav-model')).toHaveText('RootDoc');
+    await expect(page.getByTitle('SubDoc', { exact: true })).toBeVisible();
+
+    // Open the folder's model via the side panel: still in the editor, model switched.
+    await page.getByTitle('SubDoc', { exact: true }).click();
+    await expect(page.locator('.bpmn-modeler')).toBeVisible();
+    await expect(page.locator('.nav-model')).toHaveText('SubDoc');
+  });
+
   test('auto-save persists a change without clicking Save', async ({ page }) => {
     const project = uniqueName('AutoSaver');
     await createProject(page, project);

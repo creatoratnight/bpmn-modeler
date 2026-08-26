@@ -18,10 +18,16 @@ Atomically writes model metadata and XML data in a single multi-path `update` ca
 
 | RTDB path | Fields written |
 |-----------|----------------|
-| `/bpmnModels/{model.id}` | `name`, `type: 'bpmn'`, `ownerId`, `folder` (or `null`), `projectId`, `updatedAt` |
+| `/bpmnModels/{model.id}/name` | `model.name` |
+| `/bpmnModels/{model.id}/type` | `'bpmn'` |
+| `/bpmnModels/{model.id}/ownerId` | `model.ownerId` |
+| `/bpmnModels/{model.id}/folder` | `model.folder` (or `null`) |
+| `/bpmnModels/{model.id}/projectId` | `model.projectId` |
+| `/bpmnModels/{model.id}/updatedAt` | `new Date().toISOString()` |
 | `/modelXmlData/{model.id}/xmlData` | `model.xmlData` |
 
 **Notes:**
+- Fields are written **individually** rather than by replacing the whole `bpmnModels/{model.id}` node. This preserves the `milestones` child stored under the model (see [Milestone metadata](projects.md#5a-milestone-metadata)), which a whole-node replacement would delete.
 - `folder` is set to `model.folder || null` — a missing folder is stored as `null`, not omitted.
 - `updatedAt` is set to `new Date().toISOString()` on every call. `createdAt` is not written on save; it is set only at creation time and preserved on subsequent saves.
 - Returns `Promise<void>`; logs success to the console.
@@ -34,10 +40,15 @@ Atomically writes DMN model metadata and XML data. **Note:** this function name 
 
 | RTDB path | Fields written |
 |-----------|----------------|
-| `/bpmnModels/{model.id}` | `name`, `type: 'dmn'`, `ownerId`, `projectId`, `updatedAt` |
+| `/bpmnModels/{model.id}/name` | `model.name` |
+| `/bpmnModels/{model.id}/type` | `'dmn'` |
+| `/bpmnModels/{model.id}/ownerId` | `model.ownerId` |
+| `/bpmnModels/{model.id}/projectId` | `model.projectId` |
+| `/bpmnModels/{model.id}/updatedAt` | `new Date().toISOString()` |
 | `/modelXmlData/{model.id}/xmlData` | `model.xmlData` |
 
 **Notes:**
+- Like `saveBPMNModel`, fields are written individually so the model's `milestones` child is preserved across saves.
 - Unlike `saveBPMNModel`, no `folder` field is written — DMN models do not track folder placement in this function.
 - Returns `Promise<void>`.
 
@@ -45,29 +56,42 @@ Atomically writes DMN model metadata and XML data. **Note:** this function name 
 
 ### saveMilestone(modelId, name, description, xmlData, userId)
 
-Pushes a new milestone under `milestones/{modelId}` using `push` (Firebase auto-generated key).
+Generates a milestone ID (`push(ref(db, 'milestoneData')).key`) and writes the milestone in **two parts** in a single multi-path `update` call: lightweight metadata under the model, and the XML snapshot separately.
 
 | RTDB path | Fields written |
 |-----------|----------------|
-| `milestones/{modelId}/{autoKey}` | `name`, `description`, `xmlData`, `createdBy: userId`, `createdAt` |
+| `/bpmnModels/{modelId}/milestones/{milestoneId}` | `name`, `description`, `createdBy: userId`, `createdAt` |
+| `/milestoneData/{milestoneId}/xmlData` | `xmlData` |
 
-Returns `Promise<void>`.
+Returns `Promise<string>` — the generated `milestoneId`.
 
 ---
 
 ### getMilestones(modelId): Promise\<Milestone[]\>
 
-Reads the full `milestones/{modelId}` subtree in a single `get` call and returns the items sorted **newest-first** by `createdAt`.
+Reads the metadata subtree `bpmnModels/{modelId}/milestones` in a single `get` call and returns the items sorted **newest-first** by `createdAt`. The XML snapshots are **not** loaded here.
 
-**Returned shape per item:** `{ id: key, name, description, xmlData, createdBy, createdAt }`
+**Returned shape per item:** `{ id: key, name, description, createdBy, createdAt }`
 
 Returns `[]` if the path does not exist.
 
 ---
 
+### getMilestoneXml(milestoneId): Promise\<string | null\>
+
+Fetches a single milestone's XML snapshot on demand from `milestoneData/{milestoneId}/xmlData`. Returns `null` if the path does not exist. Called when a milestone is actually loaded, so the list view never has to read the heavy XML.
+
+---
+
+### getModelMilestoneIds(modelId): Promise\<string[]\>
+
+Returns the milestone IDs for a model by reading the keys of `bpmnModels/{modelId}/milestones`. Used by cascade deletes to clean up the associated `milestoneData/{milestoneId}` entries, which live outside the model node. Returns `[]` if the model has no milestones.
+
+---
+
 ### deleteMilestone(modelId, milestoneId)
 
-Removes `milestones/{modelId}/{milestoneId}`. Returns `Promise<void>`.
+Removes both parts of a milestone in a single multi-path `update`: the metadata at `/bpmnModels/{modelId}/milestones/{milestoneId}` and the snapshot at `/milestoneData/{milestoneId}`. Returns `Promise<void>`.
 
 ---
 
@@ -154,10 +178,11 @@ Deletes all models, XML data, milestones, and invitations belonging to a project
 
 | Step | RTDB query | Removals per matched key |
 |------|-----------|--------------------------|
-| 1 | `bpmnModels` where `projectId == projectId` | `bpmnModels/{key}`, `modelXmlData/{key}`, `milestones/{key}` |
+| 1 | `bpmnModels` where `projectId == projectId` | `bpmnModels/{key}` (includes the model's milestone metadata child), `modelXmlData/{key}`, `milestones/{key}` (legacy pre-migration layout), and `milestoneData/{milestoneId}` for each milestone under the model |
 | 2 | `invitations` where `projectId == projectId` | `invitations/{key}` |
 
 **Validation / edge cases:**
+- The milestone XML snapshots (`milestoneData/{milestoneId}`) live outside the model node, so they are removed explicitly using the milestone IDs read from each model's `milestones` child.
 - `comments/{key}` is **not** removed — comments are not cleaned up on project deletion.
 - Individual `remove` calls inside the `forEach` are fire-and-forget (no `await`); the returned promise resolves when the queries complete, not when all removes do.
 
@@ -258,7 +283,7 @@ flowchart TD
     A --> E[utils.service.tsx]
 
     B -->|RTDB update| F["/bpmnModels/{id}\n/modelXmlData/{id}"]
-    B -->|RTDB push/get/remove| G["milestones/{modelId}"]
+    B -->|RTDB update/get| G["bpmnModels/{modelId}/milestones\nmilestoneData/{milestoneId}"]
     B -->|RTDB push/get/remove| H["comments/{modelId}"]
 
     C -->|RTDB set/get| I["users/{uid}"]
@@ -268,7 +293,7 @@ flowchart TD
     J -.->|cross-link| K
     K -.->|cross-link| J
 
-    D -->|RTDB query + remove| M["bpmnModels\nmodelXmlData\nmilestones\ninvitations"]
+    D -->|RTDB query + remove| M["bpmnModels\nmodelXmlData\nmilestones (legacy)\nmilestoneData\ninvitations"]
 
     E -->|Browser Blob + a| N[File download]
     E --> O["camelize / toKebabCase\nconvertDateString / sortRows"]
