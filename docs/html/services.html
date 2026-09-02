@@ -20,7 +20,7 @@
 
       <section>
         <h2>1. models.service.tsx</h2>
-        <p>CRUD operations for BPMN/DMN model metadata and XML data, milestones, and comments. All reads and writes use the Firebase Realtime Database SDK.</p>
+        <p>CRUD operations for BPMN/DMN model metadata and XML data, milestones, comments, and collaborative persistence. All reads and writes use the Firebase Realtime Database SDK.</p>
         <p><strong>Source:</strong> <code>src/services/models.service.tsx</code></p>
 
         <h3>saveBPMNModel(model)</h3>
@@ -63,6 +63,22 @@
           <li>Like <code>saveBPMNModel</code>, fields are written individually so the model's <code>milestones</code> child is preserved across saves.</li>
           <li>Unlike <code>saveBPMNModel</code>, no <code>folder</code> field is written — DMN models do not track folder placement in this function.</li>
           <li>Returns <code>Promise&lt;void&gt;</code>.</li>
+        </ul>
+
+        <h3>persistCollaborativeXml(modelId, xml)</h3>
+        <p>Writes only the XML and touches <code>updatedAt</code>, in a single multi-path <code>update</code>. Used by the real-time collaboration <strong>persistence leader</strong> — the single client per editing session that writes the shared document back to the database, on a slow debounce decoupled from the faster live-sync cadence.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
+          <tbody>
+            <tr><td><code>/modelXmlData/{modelId}/xmlData</code></td><td><code>xml</code></td></tr>
+            <tr><td><code>/bpmnModels/{modelId}/updatedAt</code></td><td><code>new Date().toISOString()</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Notes:</strong></p>
+        <ul>
+          <li>Only the XML and <code>updatedAt</code> are written; model metadata (<code>name</code>, <code>type</code>, <code>ownerId</code>, <code>projectId</code>, <code>folder</code>) is left untouched, since it does not change while editing the diagram.</li>
+          <li>Because exactly one elected leader writes the document per session, concurrent editors no longer overwrite each other's whole file — this replaces the silent last-writer-wins behaviour of the per-edit auto-save path while collaborating.</li>
+          <li>Returns <code>Promise&lt;void&gt;</code>; logs errors to the console.</li>
         </ul>
 
         <h3>saveMilestone(modelId, name, description, xmlData, userId)</h3>

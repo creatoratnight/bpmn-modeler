@@ -32,3 +32,6 @@ functions/.env
 *.njsproj
 *.sln
 *.sw?
+
+# Collaboration data-rate test report (generated)
+e2e/.collab-report/

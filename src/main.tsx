@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
+import './config/e2e-hooks'
 import './index.scss'
 import 'toastr/build/toastr.min.css';
 import { BrowserRouter } from 'react-router-dom';

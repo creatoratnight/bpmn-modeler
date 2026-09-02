@@ -2,7 +2,7 @@
 
 ## Context
 
-The `src/config/` directory holds two runtime configuration files consumed by the React frontend and the Cloud Functions build scripts. A third project-root file, `firebase.json`, drives the Firebase CLI for deployments and the local emulator. Application code imports only from `src/config/` — nothing reads from `firebase.json` at runtime.
+The `src/config/` directory holds the runtime configuration files consumed by the React frontend and the Cloud Functions build scripts. Two project-root files, `firebase.json` and `database.rules.json`, drive the Firebase CLI for deployments, the local emulator, and the Realtime Database security rules. Application code imports only from `src/config/` — nothing reads from `firebase.json` or `database.rules.json` at runtime.
 
 ---
 
@@ -70,6 +70,16 @@ When the app is started with `VITE_FIREBASE_EMULATOR=true` (set by `vite --mode 
 
 The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signInWithEmailAndPassword`, `createUserWithEmailAndPassword`) and `firebase/database` (`connectDatabaseEmulator`). It is present in both `.example.firebase.js` (committed) and `.firebase.js` (gitignored, actual).
 
+### End-to-end database hook (e2e-hooks.ts)
+
+`src/config/e2e-hooks.ts` is a committed side-effect module imported by `src/main.tsx`. Guarded by the same `VITE_FIREBASE_EMULATOR` flag (so it is stripped from production builds), it exposes a second test hook alongside `__E2E_AUTH__`:
+
+| Action | Detail |
+|--------|--------|
+| `window.__E2E_DB__ = { getDatabase, ref, get, set, update, remove }` | The app's own (emulator-connected) Realtime Database handle plus the modular helpers. Tests use it to seed data — e.g. cross-user project membership in the collaboration test — through the exact database connection, namespace, and security rules the app itself uses. |
+
+**Source:** `src/config/e2e-hooks.ts`
+
 ---
 
 ## 3. Firebase project config (firebase.json)
@@ -85,6 +95,12 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `source` | `"functions"` | Directory containing the Cloud Functions package. |
 | `predeploy` | `["npm --prefix functions install", "npm --prefix functions run build"]` | Steps run before every function deploy: install dependencies, then compile TypeScript → `lib/`. |
 
+### database
+
+| Field | Value | Description |
+|-------|-------|-------------|
+| `rules` | `"database.rules.json"` | Path to the Realtime Database security rules. Applied both on `firebase deploy` and by the local Database emulator, so the rules are version-controlled and enforced identically in tests. |
+
 ### hosting
 
 | Field | Value | Description |
@@ -98,17 +114,32 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | Emulator | Port | Description |
 |----------|------|-------------|
 | `auth` | `9099` | Local Firebase Auth emulator. Used by the end-to-end tests to sign in without real OAuth. |
-| `database` | `9000` | Local Realtime Database emulator. Used by the end-to-end tests; defaults to allow-all rules. |
+| `database` | `9000` | Local Realtime Database emulator. Used by the end-to-end tests; loads the security rules from `database.rules.json` (the `database.rules` key above), so tests run against the same rules as production. |
 | `functions` | `5001` | Local Firebase Functions emulator. |
 | `pubsub` | `8085` | Local Pub/Sub emulator (used to trigger billing-guard functions in development). |
 | `ui` | `4000` | Firebase Emulator UI dashboard. |
 | `singleProjectMode` | `true` | Emulators operate as a single project, enabling cross-emulator calls. |
 
-> No deploy-level `database.rules` key is configured in `firebase.json` — RTDB security rules are managed in the Firebase console, and omitting the key keeps a bare `firebase deploy` from pushing rules to production. The Database emulator therefore defaults to allow-all rules, which is intentional for tests.
+> The `database.rules` key points at `database.rules.json` (see §4), so a bare `firebase deploy` pushes the rules and the Database emulator enforces them during tests. (Historically no rules key was configured and the emulator defaulted to allow-all.)
 
 ---
 
-## 4. Build config (vite.config.ts)
+## 4. Realtime Database security rules (database.rules.json)
+
+`database.rules.json` holds the Realtime Database security rules, referenced from `firebase.json`'s `database.rules` key. It is enforced on deploy and by the local emulator. All authorization is expressed here; there is no server-side code path for it.
+
+**Source:** `database.rules.json`
+
+| Node | Access | Description |
+|------|--------|-------------|
+| `users/{uid}` | Any authed user may read; a user may write only their own node (`email` is read-only). | User profile + reverse project index. |
+| `projects`, `bpmnModels`, `modelXmlData`, `invitations`, `milestoneData` | Authed users. | Project/model metadata, model XML, invitations, milestone snapshots. |
+| `milestones/{modelId}`, `comments/{modelId}` | Members of the model's project only (resolved via `bpmnModels/{modelId}/projectId` → `projects/{projectId}/members/{uid}`). | Milestone metadata and comments. |
+| `sessions/{modelId}` | Members of the model's project only. | Ephemeral real-time collaboration state — `presence`, `cursors`, `selections`, `viewports`, `ops`, `leader`, and the shared live `doc`. Per-user child nodes are writable only by that user (`auth.uid === $uid`); `doc`/`leader` writes must be self-attributed. |
+
+---
+
+## 5. Build config (vite.config.ts)
 
 `vite.config.ts` contains the Vite build configuration for the frontend. It is minimal — only the React plugin is registered. No aliases, proxy rules, or environment-variable transforms are configured.
 
@@ -120,7 +151,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 
 ---
 
-## 5. End-to-end test config (playwright.config.ts)
+## 6. End-to-end test config (playwright.config.ts)
 
 `playwright.config.ts` configures the Playwright end-to-end test runner. Tests live in `e2e/`. The config auto-starts the Vite dev server (in e2e mode) on a dedicated port before the suite; the Firebase emulators are started around the run by the `test:e2e` / `test:e2e:ui` scripts.
 
@@ -136,7 +167,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `reporter` | `'html'` | Generates an HTML report (opened via `npm run test:e2e:report`). |
 | `use.baseURL` | `'http://localhost:5174'` | Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal `npm run dev` on 5173. |
 | `use.trace` | `'on-first-retry'` | Captures a Playwright trace when a test is retried. |
-| `projects` | `[chromium, screenshots]` | `chromium` runs the `*.spec.ts` tests (Desktop Chrome; Firefox/WebKit commented out). `screenshots` runs only `*.shots.ts` at a 1440×900 viewport for documentation captures and is excluded from the normal test run. |
+| `projects` | `[chromium, screenshots, collab]` | `chromium` runs the `*.spec.ts` tests (Desktop Chrome; Firefox/WebKit commented out) but **excludes** `collaboration.spec.ts` via `testIgnore`. `screenshots` runs only `*.shots.ts` at a 1440×900 viewport for documentation captures. `collab` runs only `collaboration.spec.ts` — the heavy, multi-window two-client collaboration test — opt-in via `npm run test:collab`. Both extra projects are excluded from the normal test run. |
 | `webServer.command` | `'npm run dev:e2e'` | Command started before the suite (`vite --mode e2e`, loads `.env.e2e`). |
 | `webServer.url` | `'http://localhost:5174'` | URL polled until the dev server is ready. |
 | `webServer.reuseExistingServer` | `!process.env.CI` | Reuses an already-running dev server locally; always starts fresh on CI. |
@@ -151,6 +182,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `test:e2e` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium"` | Boots the emulators, runs the test suite headless (chromium project only — never the screenshot captures), tears them down. |
 | `test:e2e:ui` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium --ui"` | Interactive Playwright UI mode; boots the emulators automatically (no separate `npm run emulators` needed). |
 | `test:e2e:report` | `playwright show-report` | Opens the last HTML report. |
+| `test:collab` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=collab"` | Boots the emulators and runs only the two-client real-time collaboration + data-rate test. Launches two side-by-side headed browser windows by default (set `HEADLESS=1` to hide them) and writes a report to `e2e/.collab-report/index.html`. |
 | `screenshots` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"` | Captures documentation screenshots (the `screenshots` project) into `docs/assets/screenshots/`. Managed by the `capture-screenshots` skill. |
 
 **Authentication for tests:** the `demo-bpmn` project ID runs the emulators fully offline (no real credentials). The Playwright fixture `e2e/fixtures.ts` signs in via the `window.__E2E_AUTH__` hook (see §2), creating a **unique throwaway user per test** (derived from the test ID). Because projects are scoped per user (`users/{uid}/projects`), each test runs against an empty, isolated dataset while keeping full parallelism; the emulator database is reset each run. The pre-auth smoke tests (`e2e/sign-in.spec.ts`) need no sign-in.
@@ -166,6 +198,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `e2e/core-flows.spec.ts` | Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup `State before loading '<name>'` milestone is created). |
 | `e2e/validation.spec.ts` | Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered. |
 | `e2e/model-ops.spec.ts` | Model operations & persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via `.. / <folder>`), download a `.bpmn` file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the `autoSave` localStorage key). |
+| `e2e/collaboration.spec.ts` | Two-client real-time collaboration (opt-in, `collab` project). Two users open the same model; one builds a large diagram while the other converges live; asserts presence, shared-document propagation, and convergence. Meters the Realtime Database WebSocket on each client (received bytes = billable egress), breaks it down by phase, and writes a data-rate report with a cost projection to `e2e/.collab-report/`. |
 
 **Documentation screenshots:** the `screenshots` Playwright project (run via `npm run screenshots`) captures UI images into `docs/assets/screenshots/`. Shots are defined in `e2e/screenshots/manifest.ts` and captured serially by `e2e/screenshots/capture.shots.ts` (toasts hidden, fixed names for deterministic images). This is driven by the `capture-screenshots` skill; the images are committed and embedded in the Markdown docs and their HTML twins.
 
@@ -193,6 +226,8 @@ flowchart TD
 
     I["firebase.json\n(Firebase CLI only)"] --> J["firebase deploy\n(Functions + Hosting)"]
     I --> K["firebase emulators\nauth :9099 / database :9000\nfunctions :5001 / pubsub :8085 / UI :4000"]
+    S["database.rules.json\n(RTDB security rules)"] --> J
+    S --> K
 
     L["vite.config.ts\n(Vite build tool)"] --> M["npm run build\n→ dist/"]
     M --> J
@@ -213,9 +248,11 @@ flowchart TD
 - `src/config/config.js`
 - `src/config/.example.firebase.js`
 - `src/config/.firebase.js`
+- `src/config/e2e-hooks.ts`
 
 ### Firebase project & build
 - `firebase.json`
+- `database.rules.json`
 - `vite.config.ts`
 
 ### Testing
@@ -223,6 +260,7 @@ flowchart TD
 - `.env.e2e`
 - `e2e/fixtures.ts`
 - `e2e/sign-in.spec.ts`
+- `e2e/collaboration.spec.ts`
 - `e2e/projects.spec.ts`
 - `e2e/project-crud.spec.ts`
 - `e2e/editor.spec.ts`

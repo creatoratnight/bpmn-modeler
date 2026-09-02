@@ -13,6 +13,7 @@
     "test:e2e": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=chromium\"",
     "test:e2e:ui": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=chromium --ui\"",
     "test:e2e:report": "playwright show-report",
+    "test:collab": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=collab\"",
     "screenshots": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=screenshots\""
   },
   "dependencies": {
@@ -22,8 +23,10 @@
     "bpmn-js": "^17.0.2",
     "bpmn-js-color-picker": "^0.7.2",
     "diagram-js-minimap": "^5.2.0",
+    "diff-match-patch": "^1.0.5",
     "dmn-js": "^15.1.0",
     "firebase": "^10.14.1",
+    "pako": "^2.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.5.0",
@@ -32,6 +35,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
+    "@types/diff-match-patch": "^1.0.36",
+    "@types/pako": "^2.0.4",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@typescript-eslint/eslint-plugin": "^8.62.0",

@@ -8,7 +8,7 @@ The `src/services/` directory contains every function that communicates with Fir
 
 ## 1. models.service.tsx
 
-CRUD operations for BPMN/DMN model metadata and XML data, milestones, and comments. All reads and writes use the Firebase Realtime Database SDK.
+CRUD operations for BPMN/DMN model metadata and XML data, milestones, comments, and collaborative persistence. All reads and writes use the Firebase Realtime Database SDK.
 
 **Source:** `src/services/models.service.tsx`
 
@@ -51,6 +51,22 @@ Atomically writes DMN model metadata and XML data. **Note:** this function name 
 - Like `saveBPMNModel`, fields are written individually so the model's `milestones` child is preserved across saves.
 - Unlike `saveBPMNModel`, no `folder` field is written — DMN models do not track folder placement in this function.
 - Returns `Promise<void>`.
+
+---
+
+### persistCollaborativeXml(modelId, xml)
+
+Writes only the XML and touches `updatedAt`, in a single multi-path `update`. Used by the real-time collaboration **persistence leader** — the single client per editing session that writes the shared document back to the database, on a slow debounce decoupled from the faster live-sync cadence.
+
+| RTDB path | Fields written |
+|-----------|----------------|
+| `/modelXmlData/{modelId}/xmlData` | `xml` |
+| `/bpmnModels/{modelId}/updatedAt` | `new Date().toISOString()` |
+
+**Notes:**
+- Only the XML and `updatedAt` are written; model metadata (`name`, `type`, `ownerId`, `projectId`, `folder`) is left untouched, since it does not change while editing the diagram.
+- Because exactly one elected leader writes the document per session, concurrent editors no longer overwrite each other's whole file — this replaces the silent last-writer-wins behaviour of the per-edit auto-save path while collaborating.
+- Returns `Promise<void>`; logs errors to the console.
 
 ---
 

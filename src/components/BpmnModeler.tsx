@@ -1,14 +1,17 @@
-import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import BpmnModeler from 'bpmn-js/lib/Modeler';
 import BpmnColorPickerModule from 'bpmn-js-color-picker';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 import minimapModule from 'diagram-js-minimap';
+import { CollabBinding } from '../collaboration/CollabBinding';
+import { DocSync } from '../collaboration/DocSync';
 
 
-const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onViewPositionChange }, ref) => {
+const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onViewPositionChange, collabSession }, ref) => {
     const modelerRef = useRef(null);
     const modelerInstance = useRef(null);
+    const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
         modelerInstance.current = new BpmnModeler({
@@ -31,6 +34,8 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
             if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
                 (window as any).__E2E_BPMN__ = modelerInstance.current;
             }
+            // Signals the collaboration binding effect that the modeler is ready.
+            setIsReady(true);
         });
 
         modelerInstance.current.on('canvas.viewbox.changed', () => {
@@ -56,6 +61,18 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
             modelerInstance.current.destroy();
         };
     }, []);
+
+    // Attach the real-time collaboration binding (peer cursors + selection
+    // overlay) once the modeler is ready and a session is available. Kept in its
+    // own effect because `collabSession` arrives on the render *after* mount.
+    useEffect(() => {
+        if (!isReady || !collabSession || !modelerInstance.current) return;
+        const binding = new CollabBinding(modelerInstance.current, collabSession);
+        binding.start();
+        const docSync = new DocSync(modelerInstance.current, collabSession);
+        docSync.start();
+        return () => { binding.stop(); docSync.stop(); };
+    }, [isReady, collabSession]);
 
     useImperativeHandle(ref, () => ({
         saveSVG: () => {

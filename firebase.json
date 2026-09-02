@@ -6,6 +6,9 @@
       "npm --prefix functions run build"
     ]
   },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [

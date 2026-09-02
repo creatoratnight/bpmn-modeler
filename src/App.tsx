@@ -20,6 +20,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import ShareModal from "./components/ShareModal.tsx";
 import MilestonesModal from "./components/MilestonesModal.tsx";
 import AddCommentModal from "./components/AddCommentModal.tsx";
+import { useCollaboration } from "./collaboration/useCollaboration";
+import PresenceBar from "./collaboration/PresenceBar";
 
 
 function App() {
@@ -71,6 +73,23 @@ function App() {
 
     const navigate = useNavigate();
     const location = useLocation();
+
+    // Real-time collaboration for the open BPMN model: joins a presence session,
+    // exposes peers for the presence bar, and hands the session to the modeler,
+    // which attaches the live cursor/selection overlay.
+    const { session: collabSession, peers: collabPeers } = useCollaboration({
+        modelId: model?.id,
+        user,
+        enabled: viewMode === 'BPMN' && !!model?.id && !!user,
+    });
+    // True when at least one other person is editing this model. While it holds,
+    // auto-save is forced on and persistence is routed through the collaboration
+    // leader (see handleModelChange / the auto-save toggle below).
+    const isCollaborating = collabPeers.length > 0;
+    const collaboratingRef = useRef(false);
+    useEffect(() => {
+        collaboratingRef.current = isCollaborating;
+    }, [isCollaborating]);
 
     const autoSaveRef = useRef(autoSave);
     const modelRef = useRef(model);
@@ -466,12 +485,19 @@ function App() {
     };
 
     const handleModelChange = useCallback((newXml) => {
-        setChanges(true);
         const updatedModel = {
             ...modelRef.current,
             xmlData: newXml
         };
         setModel(updatedModel);
+        // While collaborating, the collaboration leader persists the shared
+        // document (auto-save is forced on) — don't also write from here, which
+        // would reintroduce the per-edit write storm and the overwrite race.
+        if (collaboratingRef.current) {
+            setChanges(false);
+            return;
+        }
+        setChanges(true);
         if (autoSaveRef.current) {
             saveBPMNModel(updatedModel);
             setChanges(false);
@@ -885,14 +911,16 @@ function App() {
                                   />
                           </div>
                           <div className="modeler-toolbar-right">
+                              {viewMode === 'BPMN' && <PresenceBar peers={collabPeers} />}
                               {viewMode === 'BPMN' &&
                                   <Toggle
                                       className="auto-save-toggle"
                                       id="auto-save"
-                                      labelText="Auto save"
+                                      labelText={isCollaborating ? "Auto save (on while collaborating)" : "Auto save"}
                                       hideLabel={true}
                                       size="sm"
-                                      toggled={autoSave}
+                                      toggled={isCollaborating ? true : autoSave}
+                                      disabled={isCollaborating}
                                       onToggle={(checked) => {
                                           if (checked) {
                                               saveBPMNModel(model);
@@ -937,7 +965,7 @@ function App() {
                               <h2>Loading Model...</h2>
                           </div>
                       )}
-                      {viewMode === 'BPMN' && !isLoadingXml && <BPMNModelerComponent key={model.id} ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
+                      {viewMode === 'BPMN' && !isLoadingXml && <BPMNModelerComponent key={model.id} ref={bpmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onModelChange={handleModelChange} onViewPositionChange={handleViewPositionChange} collabSession={collabSession}/>}
                       {viewMode === 'DMN' && !isLoadingXml && <DMNModelerComponent key={model.id} ref={dmnModelerRef} xml={model.xmlData} viewPosition={viewPosition} onDMNChange={handleModelChange} onViewPositionChange={handleViewPositionChange}/>}
                   </div>
               <div style={{

@@ -34,6 +34,18 @@ export default defineConfig({
     {
       name: 'chromium',
       // The default testMatch (*.spec.ts) excludes the *.shots.ts capture file.
+      // The collaboration test manages its own (headed, multi-window) browsers
+      // and is heavy, so it is opt-in via `npm run test:collab`, not the default run.
+      testIgnore: '**/collaboration.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+
+    // Two-client real-time collaboration + database data-rate test. Run via
+    // `npm run test:collab`. Launches its own side-by-side headed windows (set
+    // HEADLESS=1 to run without them) and writes a report under e2e/.collab-report/.
+    {
+      name: 'collab',
+      testMatch: '**/collaboration.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
     // Uncomment to test other browsers (run `npx playwright install firefox webkit` first).
