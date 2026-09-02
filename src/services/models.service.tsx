@@ -21,6 +21,23 @@ export const saveBPMNModel = (model) => {
     });
 };
 
+// Persist just the XML (and touch updatedAt) for a model. Used by the
+// collaboration persistence leader, which writes the shared document to the
+// database on a slow debounce — decoupled from the fast live-sync cadence, and
+// with a single writer per session so concurrent editors never overwrite each
+// other's whole file. Metadata (name/type/owner/...) is untouched here because
+// it does not change while editing the diagram.
+export const persistCollaborativeXml = (modelId, xml) => {
+    const db = getDatabase();
+    const updates = {};
+    updates[`/modelXmlData/${modelId}/xmlData`] = xml;
+    updates[`/bpmnModels/${modelId}/updatedAt`] = new Date().toISOString();
+
+    return update(ref(db), updates).catch((error) => {
+        console.error('Error persisting collaborative XML: ', error);
+    });
+};
+
 export const saveDMNodel = (model) => {
     const db = getDatabase();
     const updates = {};

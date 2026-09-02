@@ -72,6 +72,13 @@ jobs:
       - name: Run e2e tests
         run: npm run test:e2e
 
+      # Two-client collaboration test doubling as a cost-regression guard: it
+      # asserts per-edit database egress stays within the delta-sync budget, so a
+      # regression to full-document sync (which scales with model size) fails CI.
+      # HEADLESS=1 runs the two browsers without windows.
+      - name: Run collaboration cost-regression guard
+        run: HEADLESS=1 npm run test:collab
+
       # Publish the HTML report so failures can be inspected from the run page.
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
@@ -79,4 +86,13 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 7
+
+      # Publish the collaboration data-rate report (per-edit egress + projections).
+      - name: Upload collaboration data-rate report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: collab-data-rate-report
+          path: e2e/.collab-report/
           retention-days: 7

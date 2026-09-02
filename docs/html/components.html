@@ -31,6 +31,7 @@
             <tr><td><code>viewPosition</code></td><td><code>{ zoom: number, scroll: { x, y, width, height } }</code></td><td><span class="badge opt">No</span></td><td>If provided, restores the zoom level and scroll offset after XML import.</td></tr>
             <tr><td><code>onModelChange</code></td><td><code>(xml: string) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Fired on every diagram change event; receives the updated XML.</td></tr>
             <tr><td><code>onViewPositionChange</code></td><td><code>(viewbox: object) =&gt; void</code></td><td><span class="badge req">Yes</span></td><td>Fired when the canvas viewport changes; receives the current viewbox.</td></tr>
+            <tr><td><code>collabSession</code></td><td><code>CollaborationSession | null</code></td><td><span class="badge opt">No</span></td><td>Live collaboration session for the open model (from <code>useCollaboration</code>). When set, the modeler attaches the real-time collaboration bindings once the initial XML import resolves.</td></tr>
           </tbody>
         </table></div>
         <p><strong>Imperative ref API (via <code>useImperativeHandle</code>):</strong></p>
@@ -43,6 +44,7 @@
           </tbody>
         </table></div>
         <blockquote><p><strong>E2E test hook:</strong> in end-to-end test mode (<code>VITE_FIREBASE_EMULATOR=true</code>), the underlying <code>bpmn-js</code> modeler instance is exposed on <code>window.__E2E_BPMN__</code> once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see <code>e2e/editor.spec.ts</code>). The block is guarded so it is stripped from production builds.</p></blockquote>
+        <blockquote><p><strong>Collaboration binding:</strong> when a <code>collabSession</code> is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: <code>CollabBinding</code> (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and <code>DocSync</code> (full-document live sync between peers, plus leader-elected persistence back to <code>modelXmlData</code>). Both are torn down when the session clears or the component unmounts. See the presence UI in §7.</p></blockquote>
 
         <h3>DmnModeler</h3>
         <p>DMN diagram editor, wrapping <code>dmn-js</code>. Supports both the DRD (Decision Requirements Diagram) view and the decision table view; <code>views.changed</code> is used to re-export XML when the active view switches.</p>
@@ -218,6 +220,27 @@
       </section>
 
       <section>
+        <h2>7. Collaboration presence</h2>
+
+        <h3>PresenceBar</h3>
+        <p>Presentational avatar stack shown in the BPMN modeler toolbar, indicating who else is editing the current model. Driven by the <code>peers</code> returned from the <code>useCollaboration</code> hook.</p>
+        <p><strong>Source:</strong> <code>src/collaboration/PresenceBar.tsx</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Prop</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>peers</code></td><td><code>Peer[]</code></td><td><span class="badge req">Yes</span></td><td>Other users currently editing the same model (excludes the local user).</td></tr>
+            <tr><td><code>max</code></td><td><code>number</code></td><td><span class="badge opt">No</span></td><td>Maximum avatars rendered before collapsing the rest into a <code>+N</code> chip. Defaults to <code>5</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Behaviour (derived from code):</strong></p>
+        <ul>
+          <li>Renders <code>null</code> when <code>peers</code> is empty — nothing is shown when you are editing alone.</li>
+          <li>Each avatar is a 28 px circle ringed in that peer's collaboration color; it shows the peer's avatar image when available, otherwise their initials (first + last name letters, or the first two characters of a single-word name).</li>
+          <li>When more than <code>max</code> peers are present, a <code>+N</code> chip is appended whose <code>title</code> lists the overflow names.</li>
+        </ul>
+      </section>
+
+      <section>
         <h2>How it fits together</h2>
         <pre class="mermaid">
 flowchart TD
@@ -280,6 +303,11 @@ flowchart TD
           <li><code>src/components/LogoutModal.tsx</code></li>
           <li><code>src/components/ShareModal.tsx</code></li>
         </ul>
+        <h3>Collaboration presence</h3>
+        <ul>
+          <li><code>src/collaboration/PresenceBar.tsx</code></li>
+        </ul>
+        <blockquote><p>The real-time collaboration <strong>engine</strong> that these UI pieces consume — <code>useCollaboration</code>, <code>CollaborationSession</code>, <code>DocSync</code>, <code>CollabBinding</code>, and the shared <code>identity</code>/<code>types</code> modules under <code>src/collaboration/</code> — is not documented here; it warrants its own document (<code>/generate-docs collaboration</code>).</p></blockquote>
       </section>
     </main>
     <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>

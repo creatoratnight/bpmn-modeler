@@ -16,7 +16,7 @@
     <main class="content">
       <p class="kicker">Data Dictionary</p>
       <h1>Config</h1>
-      <p class="lede">The <code>src/config/</code> directory holds two runtime configuration files consumed by the React frontend and the Cloud Functions build scripts. A third project-root file, <code>firebase.json</code>, drives the Firebase CLI for deployments and the local emulator. Application code imports only from <code>src/config/</code> — nothing reads from <code>firebase.json</code> at runtime.</p>
+      <p class="lede">The <code>src/config/</code> directory holds the runtime configuration files consumed by the React frontend and the Cloud Functions build scripts. Two project-root files, <code>firebase.json</code> and <code>database.rules.json</code>, drive the Firebase CLI for deployments, the local emulator, and the Realtime Database security rules. Application code imports only from <code>src/config/</code> — nothing reads from <code>firebase.json</code> or <code>database.rules.json</code> at runtime.</p>
 
       <section>
         <h2>1. Application config</h2>
@@ -85,6 +85,16 @@
           </tbody>
         </table></div>
         <p>The block adds these imports from <code>firebase/auth</code> (<code>connectAuthEmulator</code>, <code>signInWithEmailAndPassword</code>, <code>createUserWithEmailAndPassword</code>) and <code>firebase/database</code> (<code>connectDatabaseEmulator</code>). It is present in both <code>.example.firebase.js</code> (committed) and <code>.firebase.js</code> (gitignored, actual).</p>
+
+        <h3>End-to-end database hook (e2e-hooks.ts)</h3>
+        <p><code>src/config/e2e-hooks.ts</code> is a committed side-effect module imported by <code>src/main.tsx</code>. Guarded by the same <code>VITE_FIREBASE_EMULATOR</code> flag (so it is stripped from production builds), it exposes a second test hook alongside <code>__E2E_AUTH__</code>:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Action</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td><code>window.__E2E_DB__ = { getDatabase, ref, get, set, update, remove }</code></td><td>The app's own (emulator-connected) Realtime Database handle plus the modular helpers. Tests use it to seed data — e.g. cross-user project membership in the collaboration test — through the exact database connection, namespace, and security rules the app itself uses.</td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Source:</strong> <code>src/config/e2e-hooks.ts</code></p>
       </section>
 
       <section>
@@ -98,6 +108,14 @@
           <tbody>
             <tr><td><code>source</code></td><td><code>"functions"</code></td><td>Directory containing the Cloud Functions package.</td></tr>
             <tr><td><code>predeploy</code></td><td><code>["npm --prefix functions install", "npm --prefix functions run build"]</code></td><td>Steps run before every function deploy: install dependencies, then compile TypeScript → <code>lib/</code>.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>database</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Field</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>rules</code></td><td><code>"database.rules.json"</code></td><td>Path to the Realtime Database security rules. Applied both on <code>firebase deploy</code> and by the local Database emulator, so the rules are version-controlled and enforced identically in tests.</td></tr>
           </tbody>
         </table></div>
 
@@ -116,18 +134,33 @@
           <thead><tr><th>Emulator</th><th>Port</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>auth</code></td><td>9099</td><td>Local Firebase Auth emulator. Used by the end-to-end tests to sign in without real OAuth.</td></tr>
-            <tr><td><code>database</code></td><td>9000</td><td>Local Realtime Database emulator. Used by the end-to-end tests; defaults to allow-all rules.</td></tr>
+            <tr><td><code>database</code></td><td>9000</td><td>Local Realtime Database emulator. Used by the end-to-end tests; loads the security rules from <code>database.rules.json</code> (the <code>database.rules</code> key above), so tests run against the same rules as production.</td></tr>
             <tr><td><code>functions</code></td><td>5001</td><td>Local Firebase Functions emulator.</td></tr>
             <tr><td><code>pubsub</code></td><td>8085</td><td>Local Pub/Sub emulator (used to trigger billing-guard functions in development).</td></tr>
             <tr><td><code>ui</code></td><td>4000</td><td>Firebase Emulator UI dashboard.</td></tr>
             <tr><td><code>singleProjectMode</code></td><td><code>true</code></td><td>Emulators operate as a single project, enabling cross-emulator calls.</td></tr>
           </tbody>
         </table></div>
-        <blockquote><p>No deploy-level <code>database.rules</code> key is configured in <code>firebase.json</code> — RTDB security rules are managed in the Firebase console, and omitting the key keeps a bare <code>firebase deploy</code> from pushing rules to production. The Database emulator therefore defaults to allow-all rules, which is intentional for tests.</p></blockquote>
+        <blockquote><p>The <code>database.rules</code> key points at <code>database.rules.json</code> (see §4), so a bare <code>firebase deploy</code> pushes the rules and the Database emulator enforces them during tests. (Historically no rules key was configured and the emulator defaulted to allow-all.)</p></blockquote>
       </section>
 
       <section>
-        <h2>4. Build config (vite.config.ts)</h2>
+        <h2>4. Realtime Database security rules (database.rules.json)</h2>
+        <p><code>database.rules.json</code> holds the Realtime Database security rules, referenced from <code>firebase.json</code>'s <code>database.rules</code> key. It is enforced on deploy and by the local emulator. All authorization is expressed here; there is no server-side code path for it.</p>
+        <p><strong>Source:</strong> <code>database.rules.json</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Node</th><th>Access</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>users/{uid}</code></td><td>Any authed user may read; a user may write only their own node (<code>email</code> is read-only).</td><td>User profile + reverse project index.</td></tr>
+            <tr><td><code>projects</code>, <code>bpmnModels</code>, <code>modelXmlData</code>, <code>invitations</code>, <code>milestoneData</code></td><td>Authed users.</td><td>Project/model metadata, model XML, invitations, milestone snapshots.</td></tr>
+            <tr><td><code>milestones/{modelId}</code>, <code>comments/{modelId}</code></td><td>Members of the model's project only (resolved via <code>bpmnModels/{modelId}/projectId</code> → <code>projects/{projectId}/members/{uid}</code>).</td><td>Milestone metadata and comments.</td></tr>
+            <tr><td><code>sessions/{modelId}</code></td><td>Members of the model's project only.</td><td>Ephemeral real-time collaboration state — <code>presence</code>, <code>cursors</code>, <code>selections</code>, <code>viewports</code>, <code>ops</code>, <code>leader</code>, and the shared live <code>doc</code>. Per-user child nodes are writable only by that user (<code>auth.uid === $uid</code>); <code>doc</code>/<code>leader</code> writes must be self-attributed.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>5. Build config (vite.config.ts)</h2>
         <p><code>vite.config.ts</code> contains the Vite build configuration for the frontend. It is minimal — only the React plugin is registered. No aliases, proxy rules, or environment-variable transforms are configured.</p>
         <p><strong>Source:</strong> <code>vite.config.ts</code></p>
         <div class="table-wrap"><table>
@@ -139,7 +172,7 @@
       </section>
 
       <section>
-        <h2>5. End-to-end test config (playwright.config.ts)</h2>
+        <h2>6. End-to-end test config (playwright.config.ts)</h2>
         <p><code>playwright.config.ts</code> configures the Playwright end-to-end test runner. Tests live in <code>e2e/</code>. The config auto-starts the Vite dev server (in e2e mode) on a dedicated port before the suite; the Firebase emulators are started around the run by the <code>test:e2e</code> / <code>test:e2e:ui</code> scripts.</p>
         <p><strong>Source:</strong> <code>playwright.config.ts</code></p>
         <div class="table-wrap"><table>
@@ -153,7 +186,7 @@
             <tr><td><code>reporter</code></td><td><code>'html'</code></td><td>Generates an HTML report (opened via <code>npm run test:e2e:report</code>).</td></tr>
             <tr><td><code>use.baseURL</code></td><td><code>'http://localhost:5174'</code></td><td>Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal <code>npm run dev</code> on 5173.</td></tr>
             <tr><td><code>use.trace</code></td><td><code>'on-first-retry'</code></td><td>Captures a Playwright trace when a test is retried.</td></tr>
-            <tr><td><code>projects</code></td><td><code>[chromium, screenshots]</code></td><td><code>chromium</code> runs the <code>*.spec.ts</code> tests (Desktop Chrome; Firefox/WebKit commented out). <code>screenshots</code> runs only <code>*.shots.ts</code> at a 1440×900 viewport for documentation captures and is excluded from the normal test run.</td></tr>
+            <tr><td><code>projects</code></td><td><code>[chromium, screenshots, collab]</code></td><td><code>chromium</code> runs the <code>*.spec.ts</code> tests (Desktop Chrome; Firefox/WebKit commented out) but <strong>excludes</strong> <code>collaboration.spec.ts</code> via <code>testIgnore</code>. <code>screenshots</code> runs only <code>*.shots.ts</code> at a 1440×900 viewport for documentation captures. <code>collab</code> runs only <code>collaboration.spec.ts</code> — the heavy, multi-window two-client collaboration test — opt-in via <code>npm run test:collab</code>. Both extra projects are excluded from the normal test run.</td></tr>
             <tr><td><code>webServer.command</code></td><td><code>'npm run dev:e2e'</code></td><td>Command started before the suite (<code>vite --mode e2e</code>, loads <code>.env.e2e</code>).</td></tr>
             <tr><td><code>webServer.url</code></td><td><code>'http://localhost:5174'</code></td><td>URL polled until the dev server is ready.</td></tr>
             <tr><td><code>webServer.reuseExistingServer</code></td><td><code>!process.env.CI</code></td><td>Reuses an already-running dev server locally; always starts fresh on CI.</td></tr>
@@ -169,6 +202,7 @@
             <tr><td><code>test:e2e</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium"</code></td><td>Boots the emulators, runs the test suite headless (chromium project only — never the screenshot captures), tears them down.</td></tr>
             <tr><td><code>test:e2e:ui</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium --ui"</code></td><td>Interactive Playwright UI mode; boots the emulators automatically (no separate <code>npm run emulators</code> needed).</td></tr>
             <tr><td><code>test:e2e:report</code></td><td><code>playwright show-report</code></td><td>Opens the last HTML report.</td></tr>
+            <tr><td><code>test:collab</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=collab"</code></td><td>Boots the emulators and runs only the two-client real-time collaboration + data-rate test. Launches two side-by-side headed browser windows by default (set <code>HEADLESS=1</code> to hide them) and writes a report to <code>e2e/.collab-report/index.html</code>.</td></tr>
             <tr><td><code>screenshots</code></td><td><code>firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"</code></td><td>Captures documentation screenshots (the <code>screenshots</code> project) into <code>docs/assets/screenshots/</code>. Managed by the <code>capture-screenshots</code> skill.</td></tr>
           </tbody>
         </table></div>
@@ -184,6 +218,7 @@
             <tr><td><code>e2e/core-flows.spec.ts</code></td><td>Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup <code>State before loading '&lt;name&gt;'</code> milestone is created).</td></tr>
             <tr><td><code>e2e/validation.spec.ts</code></td><td>Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered.</td></tr>
             <tr><td><code>e2e/model-ops.spec.ts</code></td><td>Model operations &amp; persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via <code>.. / &lt;folder&gt;</code>), download a <code>.bpmn</code> file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the <code>autoSave</code> localStorage key).</td></tr>
+            <tr><td><code>e2e/collaboration.spec.ts</code></td><td>Two-client real-time collaboration (opt-in, <code>collab</code> project). Two users open the same model; one builds a large diagram while the other converges live; asserts presence, shared-document propagation, and convergence. Meters the Realtime Database WebSocket on each client (received bytes = billable egress), breaks it down by phase, and writes a data-rate report with a cost projection to <code>e2e/.collab-report/</code>.</td></tr>
           </tbody>
         </table></div>
         <p><strong>Documentation screenshots:</strong> the <code>screenshots</code> Playwright project (run via <code>npm run screenshots</code>) captures UI images into <code>docs/assets/screenshots/</code>. Shots are defined in <code>e2e/screenshots/manifest.ts</code> and captured serially by <code>e2e/screenshots/capture.shots.ts</code> (toasts hidden, fixed names for deterministic images). This is driven by the <code>capture-screenshots</code> skill; the images are committed and embedded in the Markdown docs and their HTML twins.</p>
@@ -212,6 +247,8 @@ flowchart TD
 
     I["firebase.json\n(Firebase CLI only)"] --> J["firebase deploy\n(Functions + Hosting)"]
     I --> K["firebase emulators\nauth :9099 / database :9000\nfunctions :5001 / pubsub :8085 / UI :4000"]
+    S["database.rules.json\n(RTDB security rules)"] --> J
+    S --> K
 
     L["vite.config.ts\n(Vite build tool)"] --> M["npm run build\n→ dist/"]
     M --> J
@@ -232,10 +269,12 @@ flowchart TD
           <li><code>src/config/config.js</code></li>
           <li><code>src/config/.example.firebase.js</code></li>
           <li><code>src/config/.firebase.js</code></li>
+          <li><code>src/config/e2e-hooks.ts</code></li>
         </ul>
         <h3>Firebase project &amp; build</h3>
         <ul>
           <li><code>firebase.json</code></li>
+          <li><code>database.rules.json</code></li>
           <li><code>vite.config.ts</code></li>
         </ul>
         <h3>Testing</h3>
@@ -244,6 +283,7 @@ flowchart TD
           <li><code>.env.e2e</code></li>
           <li><code>e2e/fixtures.ts</code></li>
           <li><code>e2e/sign-in.spec.ts</code></li>
+          <li><code>e2e/collaboration.spec.ts</code></li>
           <li><code>e2e/projects.spec.ts</code></li>
           <li><code>e2e/project-crud.spec.ts</code></li>
           <li><code>e2e/editor.spec.ts</code></li>

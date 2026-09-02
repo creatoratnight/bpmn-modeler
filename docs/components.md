@@ -20,6 +20,7 @@ Full-featured BPMN diagram editor, wrapping the `bpmn-js` library. Exported as a
 | `viewPosition` | `{ zoom: number, scroll: { x, y, width, height } }` | No | If provided, restores the zoom level and scroll offset after XML import. |
 | `onModelChange` | `(xml: string) => void` | Yes | Fired on every diagram change event; receives the updated XML. |
 | `onViewPositionChange` | `(viewbox: object) => void` | Yes | Fired when the canvas viewport changes; receives the current viewbox. |
+| `collabSession` | `CollaborationSession \| null` | No | Live collaboration session for the open model (from `useCollaboration`). When set, the modeler attaches the real-time collaboration bindings once the initial XML import resolves. |
 
 **Imperative ref API (via `useImperativeHandle`):**
 
@@ -30,6 +31,8 @@ Full-featured BPMN diagram editor, wrapping the `bpmn-js` library. Exported as a
 | `importXML` | `(newXml: string) => Promise<void>` | Programmatically loads new XML into the editor. Used when loading a milestone. |
 
 > **E2E test hook:** in end-to-end test mode (`VITE_FIREBASE_EMULATOR=true`), the underlying `bpmn-js` modeler instance is exposed on `window.__E2E_BPMN__` once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see `e2e/editor.spec.ts`). The block is guarded so it is stripped from production builds.
+
+> **Collaboration binding:** when a `collabSession` is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: `CollabBinding` (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and `DocSync` (full-document live sync between peers, plus leader-elected persistence back to `modelXmlData`). Both are torn down when the session clears or the component unmounts. See the presence UI in [§7](#7-collaboration-presence).
 
 ---
 
@@ -210,6 +213,26 @@ Same QName validation as `AddBPMNModelModal`.
 
 ---
 
+## 7. Collaboration presence
+
+### PresenceBar
+
+Presentational avatar stack shown in the BPMN modeler toolbar, indicating who else is editing the current model. Driven by the `peers` returned from the `useCollaboration` hook.
+
+**Source:** `src/collaboration/PresenceBar.tsx`
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `peers` | `Peer[]` | Yes | Other users currently editing the same model (excludes the local user). |
+| `max` | `number` | No | Maximum avatars rendered before collapsing the rest into a `+N` chip. Defaults to `5`. |
+
+**Behaviour (derived from code):**
+- Renders `null` when `peers` is empty — nothing is shown when you are editing alone.
+- Each avatar is a 28 px circle ringed in that peer's collaboration color; it shows the peer's avatar image when available, otherwise their initials (first + last name letters, or the first two characters of a single-word name).
+- When more than `max` peers are present, a `+N` chip is appended whose `title` lists the overflow names.
+
+---
+
 ## How it fits together
 
 ```mermaid
@@ -267,3 +290,8 @@ flowchart TD
 - `src/components/SaveModal.tsx`
 - `src/components/LogoutModal.tsx`
 - `src/components/ShareModal.tsx`
+
+### Collaboration presence
+- `src/collaboration/PresenceBar.tsx`
+
+> The real-time collaboration **engine** that these UI pieces consume — `useCollaboration`, `CollaborationSession`, `DocSync`, `CollabBinding`, and the shared `identity`/`types` modules under `src/collaboration/` — is not documented here; it warrants its own document (`/generate-docs collaboration`).

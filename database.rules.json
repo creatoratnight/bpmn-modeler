@@ -1,0 +1,154 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "users": {
+      ".indexOn": "email",
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$userId": {
+        ".read": "$userId === auth.uid",
+        ".write": "$userId === auth.uid",
+        "email": {
+          ".write": false
+        },
+        "displayName": {
+          ".write": "$userId === auth.uid"
+        },
+        "imageUrl": {
+          ".write": "$userId === auth.uid"
+        }
+      }
+    },
+    "projects": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$projectId": {
+        ".read": "auth != null && data.child('members').child(auth.uid).exists()",
+        ".write": "auth != null && (data.child('ownerId').val() === auth.uid || data.child('members').child(auth.uid).exists())"
+      }
+    },
+    "bpmnModels": {
+      ".indexOn": ["projectId"],
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$modelId": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['projectId', 'ownerId', 'name', 'updatedAt', 'type'])"
+      }
+    },
+    "modelXmlData": {
+      "$modelId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "milestoneData": {
+      "$milestoneId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "invitations": {
+      ".indexOn": ["projectId", "invitedEmail"],
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$invitationId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "milestones": {
+      "$modelId": {
+        ".read": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()"
+      }
+    },
+    "comments": {
+      "$modelId": {
+        ".read": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()"
+      }
+    },
+    "sessions": {
+      "$modelId": {
+        ".read": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+
+        "presence": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['name', 'color'])",
+            "name": { ".validate": "newData.isString() && newData.val().length <= 128" },
+            "color": { ".validate": "newData.isString() && newData.val().length <= 32" },
+            "avatarUrl": { ".validate": "newData.isString() && newData.val().length <= 512" },
+            "joinedAt": { ".validate": "newData.isNumber()" },
+            "lastActive": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "cursors": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['x', 'y'])",
+            "x": { ".validate": "newData.isNumber()" },
+            "y": { ".validate": "newData.isNumber()" },
+            "t": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "selections": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+            "t": { ".validate": "newData.isNumber()" }
+          }
+        },
+
+        "viewports": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['x', 'y', 'w', 'h'])",
+            "x": { ".validate": "newData.isNumber()" },
+            "y": { ".validate": "newData.isNumber()" },
+            "w": { ".validate": "newData.isNumber()" },
+            "h": { ".validate": "newData.isNumber()" },
+            "t": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "leader": {
+          ".write": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+          ".validate": "newData.hasChildren(['uid', 'ts']) && newData.child('uid').val() === auth.uid"
+        },
+
+        "docs": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+            "snapshot": {
+              ".validate": "newData.hasChildren(['c', 'seq'])",
+              "c": { ".validate": "newData.isString()" },
+              "seq": { ".validate": "newData.isNumber()" },
+              "t": { ".validate": "newData.isNumber()" },
+              "$other": { ".validate": false }
+            },
+            "ops": {
+              ".indexOn": "seq",
+              "$opId": {
+                ".validate": "newData.hasChildren(['seq', 'p'])",
+                "seq": { ".validate": "newData.isNumber()" },
+                "base": { ".validate": "newData.isNumber()" },
+                "p": { ".validate": "newData.isString()" },
+                "t": { ".validate": "newData.isNumber()" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    }
+  }
+}
