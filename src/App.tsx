@@ -795,14 +795,7 @@ function App() {
                               borderRadius: '16px'
                           }}/>
                           Welcome, {user.displayName}
-                          <OverflowMenu flipped>
-                              <OverflowMenuItem
-                                  itemText="Migrate milestones"
-                                  onClick={(e) => {
-                                      e.stopPropagation();
-                                      setIsMigrateModalOpen(true);
-                                  }}
-                              />
+                          <OverflowMenu flipped menuOptionsClass="header-user-menu-options" align="bottom">
                               <OverflowMenuItem
                                   itemText="Logout"
                                   isDelete
@@ -954,7 +947,7 @@ function App() {
                                       hasIconOnly
                                       renderIcon={Chat}
                                       iconDescription={isCommentsPanelOpen ? "Close comments panel" : "Open comments panel"}
-                                      tooltipPosition="bottom"
+                                      tooltipPosition="left"
                                   />
                               }
                               </div>
