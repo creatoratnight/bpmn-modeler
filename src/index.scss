@@ -100,6 +100,15 @@ h2, h3, h4 {
   align-items: center;
 }
 
+// The user overflow menu renders its options in a portal on <body> at Carbon's
+// default z-index (6000). The editor toolbar's right group is a flex item with
+// z-index 9999, which — being a flex item — forms a stacking context that would
+// otherwise paint over the open menu (issue #65). Lift the user menu above it.
+// Safe against modals (~9000): the menu closes before any modal it opens.
+.header-user-menu-options {
+  z-index: 10000;
+}
+
 .header-logo img {
   height: 48px;
 }
