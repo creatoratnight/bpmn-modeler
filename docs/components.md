@@ -32,7 +32,7 @@ Full-featured BPMN diagram editor, wrapping the `bpmn-js` library. Exported as a
 
 > **E2E test hook:** in end-to-end test mode (`VITE_FIREBASE_EMULATOR=true`), the underlying `bpmn-js` modeler instance is exposed on `window.__E2E_BPMN__` once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see `e2e/editor.spec.ts`). The block is guarded so it is stripped from production builds.
 
-> **Collaboration binding:** when a `collabSession` is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: `CollabBinding` (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and `DocSync` (full-document live sync between peers, plus leader-elected persistence back to `modelXmlData`). Both are torn down when the session clears or the component unmounts. See the presence UI in [§7](#7-collaboration-presence).
+> **Collaboration binding:** when a `collabSession` is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: `CollabBinding` (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and `CollabDoc` (CRDT live sync between peers via a shared Yjs document, which *merges* concurrent edits per element and field rather than overwriting, plus leader-elected persistence back to `modelXmlData`). Both are torn down when the session clears or the component unmounts. See the presence UI in [§7](#7-collaboration-presence).
 
 ---
 
@@ -294,4 +294,4 @@ flowchart TD
 ### Collaboration presence
 - `src/collaboration/PresenceBar.tsx`
 
-> The real-time collaboration **engine** that these UI pieces consume — `useCollaboration`, `CollaborationSession`, `DocSync`, `CollabBinding`, and the shared `identity`/`types` modules under `src/collaboration/` — is not documented here; it warrants its own document (`/generate-docs collaboration`).
+> The real-time collaboration **engine** that these UI pieces consume — `useCollaboration`, `CollaborationSession`, `CollabDoc`, the Yjs binding (`BpmnYjsBinding` + `YModel`), `CollabBinding`, and the shared `identity`/`types` modules under `src/collaboration/` — is not documented here; it warrants its own document (`/generate-docs collaboration`).

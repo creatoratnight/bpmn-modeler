@@ -7,8 +7,8 @@ import {
     remove,
     update,
     query,
-    orderByChild,
-    endBefore,
+    orderByKey,
+    endAt,
     onValue,
     onChildAdded,
     onChildChanged,
@@ -26,8 +26,17 @@ import type {
     SelectionPayload,
     ViewportPayload,
 } from './types';
-import type { WriterSnapshot, WriterOp } from './DocProtocol';
-import { compressToBase64, decompressFromBase64 } from './compression';
+import { gzipBytesToBase64, base64ToGunzipBytes } from './compression';
+
+/** A leader-compacted full snapshot of the shared Yjs document. */
+export interface SharedState {
+    /** gzip+base64 of `Y.encodeStateAsUpdate(doc)`. */
+    update: Uint8Array;
+    /** Monotonic version, incremented on each compaction. */
+    v: number;
+    /** Server timestamp of the compaction. */
+    t: number;
+}
 
 /**
  * Owns one user's participation in the ephemeral collaboration session for a
@@ -61,8 +70,9 @@ export class CollaborationSession {
     private readonly selectionSelfRef: DatabaseReference;
     private readonly viewportSelfRef: DatabaseReference;
     private readonly leaderRef: DatabaseReference;
-    /** This user's own document channel: `sessions/{modelId}/docs/{uid}`. */
-    private readonly docSelfRef: DatabaseReference;
+    /** The shared, append-only Yjs update log: `sessions/{modelId}/ydoc/log`. */
+    private readonly logRef: DatabaseReference;
+    private readonly stateRef: DatabaseReference;
 
     private readonly subscriptions: Unsubscribe[] = [];
     private joined = false;
@@ -81,7 +91,8 @@ export class CollaborationSession {
         this.selectionSelfRef = ref(this.db, `${this.base}/selections/${identity.uid}`);
         this.viewportSelfRef = ref(this.db, `${this.base}/viewports/${identity.uid}`);
         this.leaderRef = ref(this.db, `${this.base}/leader`);
-        this.docSelfRef = ref(this.db, `${this.base}/docs/${identity.uid}`);
+        this.logRef = ref(this.db, `${this.base}/ydoc/log`);
+        this.stateRef = ref(this.db, `${this.base}/ydoc/state`);
     }
 
     /** This user's uid — used to filter out our own echoed document writes. */
@@ -108,7 +119,6 @@ export class CollaborationSession {
             onDisconnect(this.cursorSelfRef).remove(),
             onDisconnect(this.selectionSelfRef).remove(),
             onDisconnect(this.viewportSelfRef).remove(),
-            onDisconnect(this.docSelfRef).remove(),
         ]);
 
         await set(this.presenceSelfRef, {
@@ -144,7 +154,6 @@ export class CollaborationSession {
             onDisconnect(this.cursorSelfRef).cancel(),
             onDisconnect(this.selectionSelfRef).cancel(),
             onDisconnect(this.viewportSelfRef).cancel(),
-            onDisconnect(this.docSelfRef).cancel(),
         ]).catch(() => { /* offline: server clears via the armed handlers anyway */ });
 
         await Promise.all([
@@ -152,7 +161,6 @@ export class CollaborationSession {
             remove(this.cursorSelfRef),
             remove(this.selectionSelfRef),
             remove(this.viewportSelfRef),
-            remove(this.docSelfRef),
         ]).catch(() => { /* offline: handled by onDisconnect */ });
     }
 
@@ -202,73 +210,84 @@ export class CollaborationSession {
         return () => this.leadershipListeners.delete(callback);
     }
 
-    // --- shared document (delta protocol) ------------------------------------
+    // --- shared document (Yjs) -----------------------------------------------
     //
-    // Each user publishes to their *own* channel (`docs/{uid}`) and subscribes
-    // only to *other* users' channels, so a client never downloads its own
-    // writes (no self-echo). Within a channel:
-    //   - `snapshot` holds an occasional full document, gzip+base64 compressed —
-    //     the base a joiner/reconnect starts from.
-    //   - `ops` is an append-only log of tiny text patches against the previous
-    //     state, read with `onChildAdded` so no intermediate patch is ever lost.
-    // Only a few hundred bytes cross the wire per edit instead of the whole model.
+    // The document is one shared Yjs doc. All clients append their binary Yjs
+    // updates to a single append-only log (`ydoc/log`) and subscribe to the whole
+    // log, so every update reaches everyone. Yjs updates are idempotent and
+    // commutative, so applying them in any order — including one's own echo, which
+    // is a no-op — always converges, merging concurrent edits per-field instead of
+    // overwriting the whole document.
+    //
+    // A joiner first loads the leader-compacted full state (`ydoc/state`) and then
+    // follows the log, which the leader keeps short by pruning entries it has
+    // already folded into a freshly published state (see pruneLog). Pruning is
+    // keyed on the log's own push ids (chronologically ordered), never on a clock,
+    // so an in-flight edit newer than the compaction is never dropped.
+
+    /** Append one binary Yjs update to the shared log; resolves with its key. */
+    appendUpdate(bytes: Uint8Array): Promise<string> {
+        const child = push(this.logRef);
+        return set(child, { u: gzipBytesToBase64(bytes), t: serverTimestamp() })
+            .then(() => child.key as string);
+    }
 
     /**
-     * Publish a full-document snapshot (compressed) at sequence `seq`. Resolves
-     * with the compressed byte size, so the caller can size its snapshot cadence
-     * against the real download cost.
+     * Subscribe to the shared log. `onChildAdded` replays the current
+     * (post-prune) entries and then streams new ones; `key` is each entry's push
+     * id, so the leader can prune everything up to the last one it has applied.
      */
-    publishSnapshot(xml: string, seq: number): Promise<number> {
-        const c = compressToBase64(xml);
-        return set(ref(this.db, `${this.base}/docs/${this.identity.uid}/snapshot`), {
-            c,
-            seq,
-            t: serverTimestamp(),
-        }).then(() => c.length);
+    subscribeUpdates(onUpdate: (bytes: Uint8Array, key: string) => void): Unsubscribe {
+        const unsub = onChildAdded(this.logRef, (child) => {
+            const v = child.val() as { u?: string } | null;
+            if (!v || typeof v.u !== 'string' || !child.key) return;
+            onUpdate(base64ToGunzipBytes(v.u), child.key);
+        });
+        this.subscriptions.push(unsub);
+        return unsub;
     }
 
-    /** Append a patch op transforming state `base` into state `seq`. */
-    appendOp(patch: string, seq: number, base: number): Promise<void> {
-        const opsRef = ref(this.db, `${this.base}/docs/${this.identity.uid}/ops`);
-        return set(push(opsRef), { p: patch, seq, base, t: serverTimestamp() });
+    /**
+     * Publish the leader-compacted full document state at version `v`. Resolves
+     * with the stored (compressed) byte size, so the caller can size its adaptive
+     * compaction cadence against the real download cost a joiner pays.
+     */
+    publishState(bytes: Uint8Array, v: number): Promise<number> {
+        const u = gzipBytesToBase64(bytes);
+        return set(this.stateRef, { u, v, t: serverTimestamp() }).then(() => u.length);
     }
 
-    /** Remove ops older than `beforeSeq` (superseded by a fresh snapshot). */
-    async pruneOps(beforeSeq: number): Promise<void> {
-        const opsRef = ref(this.db, `${this.base}/docs/${this.identity.uid}/ops`);
-        const stale = await get(query(opsRef, orderByChild('seq'), endBefore(beforeSeq)));
+    /** Read the current compacted state, or null if none has been published. */
+    async readState(): Promise<SharedState | null> {
+        const snapshot = await get(this.stateRef);
+        const val = snapshot.val() as { u?: string; v?: number; t?: number } | null;
+        if (!val || typeof val.u !== 'string') return null;
+        return { update: base64ToGunzipBytes(val.u), v: val.v ?? 0, t: val.t ?? 0 };
+    }
+
+    /** Subscribe to compacted-state publications (fires with the latest each time). */
+    onState(callback: (state: SharedState) => void): Unsubscribe {
+        const unsub = onValue(this.stateRef, (snapshot) => {
+            const val = snapshot.val() as { u?: string; v?: number; t?: number } | null;
+            if (!val || typeof val.u !== 'string') return;
+            callback({ update: base64ToGunzipBytes(val.u), v: val.v ?? 0, t: val.t ?? 0 });
+        });
+        this.subscriptions.push(unsub);
+        return unsub;
+    }
+
+    /**
+     * Prune shared-log entries up to and including `upToKey` — the last entry the
+     * leader had applied when it encoded the state it just published. Those
+     * entries are all captured in that state, so no joiner needs them; anything
+     * newer (a larger push id) is left in place. Leader-only.
+     */
+    async pruneLog(upToKey: string): Promise<void> {
+        const stale = await get(query(this.logRef, orderByKey(), endAt(upToKey)));
         if (!stale.exists()) return;
         const updates: Record<string, null> = {};
         stale.forEach((child) => { updates[child.key as string] = null; });
-        await update(opsRef, updates);
-    }
-
-    /**
-     * Subscribe to a single peer's document channel: their snapshot (decompressed)
-     * and every op appended to their log. We only ever listen to *other* uids, so
-     * our own writes are never echoed back.
-     */
-    subscribeWriter(
-        peerUid: string,
-        handlers: { onSnapshot: (snap: WriterSnapshot) => void; onOp: (op: WriterOp) => void },
-    ): Unsubscribe {
-        const snapshotRef = ref(this.db, `${this.base}/docs/${peerUid}/snapshot`);
-        const opsRef = ref(this.db, `${this.base}/docs/${peerUid}/ops`);
-
-        const unsubSnapshot = onValue(snapshotRef, (snapshot) => {
-            const v = snapshot.val() as { c?: string; seq?: number; t?: number } | null;
-            if (!v || typeof v.c !== 'string' || typeof v.seq !== 'number') return;
-            handlers.onSnapshot({ xml: decompressFromBase64(v.c), seq: v.seq, t: v.t ?? 0 });
-        });
-        const unsubOps = onChildAdded(opsRef, (child) => {
-            const v = child.val() as { p?: string; seq?: number; base?: number; t?: number } | null;
-            if (!v || typeof v.p !== 'string' || typeof v.seq !== 'number' || typeof v.base !== 'number') return;
-            handlers.onOp({ patch: v.p, seq: v.seq, base: v.base, t: v.t ?? 0 });
-        });
-
-        const unsub: Unsubscribe = () => { unsubSnapshot(); unsubOps(); };
-        this.subscriptions.push(unsub);
-        return unsub;
+        await update(this.logRef, updates);
     }
 
     // --- outgoing (this user) ------------------------------------------------

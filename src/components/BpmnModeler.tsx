@@ -5,7 +5,7 @@ import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 import minimapModule from 'diagram-js-minimap';
 import { CollabBinding } from '../collaboration/CollabBinding';
-import { DocSync } from '../collaboration/DocSync';
+import { CollabDoc } from '../collaboration/CollabDoc';
 
 
 const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onViewPositionChange, collabSession }, ref) => {
@@ -69,9 +69,9 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
         if (!isReady || !collabSession || !modelerInstance.current) return;
         const binding = new CollabBinding(modelerInstance.current, collabSession);
         binding.start();
-        const docSync = new DocSync(modelerInstance.current, collabSession);
-        docSync.start();
-        return () => { binding.stop(); docSync.stop(); };
+        const collabDoc = new CollabDoc(modelerInstance.current, collabSession);
+        collabDoc.start();
+        return () => { binding.stop(); collabDoc.stop(); };
     }, [isReady, collabSession]);
 
     useImperativeHandle(ref, () => ({

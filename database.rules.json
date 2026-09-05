@@ -124,27 +124,23 @@
           ".validate": "newData.hasChildren(['uid', 'ts']) && newData.child('uid').val() === auth.uid"
         },
 
-        "docs": {
-          "$uid": {
-            ".write": "auth != null && auth.uid === $uid && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
-            "snapshot": {
-              ".validate": "newData.hasChildren(['c', 'seq'])",
-              "c": { ".validate": "newData.isString()" },
-              "seq": { ".validate": "newData.isNumber()" },
+        "ydoc": {
+          ".write": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+
+          "log": {
+            "$entryId": {
+              ".validate": "newData.hasChildren(['u'])",
+              "u": { ".validate": "newData.isString()" },
               "t": { ".validate": "newData.isNumber()" },
               "$other": { ".validate": false }
-            },
-            "ops": {
-              ".indexOn": "seq",
-              "$opId": {
-                ".validate": "newData.hasChildren(['seq', 'p'])",
-                "seq": { ".validate": "newData.isNumber()" },
-                "base": { ".validate": "newData.isNumber()" },
-                "p": { ".validate": "newData.isString()" },
-                "t": { ".validate": "newData.isNumber()" },
-                "$other": { ".validate": false }
-              }
-            },
+            }
+          },
+
+          "state": {
+            ".validate": "newData.hasChildren(['u'])",
+            "u": { ".validate": "newData.isString()" },
+            "v": { ".validate": "newData.isNumber()" },
+            "t": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           }
         }

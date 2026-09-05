@@ -44,7 +44,7 @@
           </tbody>
         </table></div>
         <blockquote><p><strong>E2E test hook:</strong> in end-to-end test mode (<code>VITE_FIREBASE_EMULATOR=true</code>), the underlying <code>bpmn-js</code> modeler instance is exposed on <code>window.__E2E_BPMN__</code> once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see <code>e2e/editor.spec.ts</code>). The block is guarded so it is stripped from production builds.</p></blockquote>
-        <blockquote><p><strong>Collaboration binding:</strong> when a <code>collabSession</code> is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: <code>CollabBinding</code> (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and <code>DocSync</code> (full-document live sync between peers, plus leader-elected persistence back to <code>modelXmlData</code>). Both are torn down when the session clears or the component unmounts. See the presence UI in §7.</p></blockquote>
+        <blockquote><p><strong>Collaboration binding:</strong> when a <code>collabSession</code> is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: <code>CollabBinding</code> (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and <code>CollabDoc</code> (CRDT live sync between peers via a shared Yjs document, which <em>merges</em> concurrent edits per element and field rather than overwriting, plus leader-elected persistence back to <code>modelXmlData</code>). Both are torn down when the session clears or the component unmounts. See the presence UI in §7.</p></blockquote>
 
         <h3>DmnModeler</h3>
         <p>DMN diagram editor, wrapping <code>dmn-js</code>. Supports both the DRD (Decision Requirements Diagram) view and the decision table view; <code>views.changed</code> is used to re-export XML when the active view switches.</p>
@@ -307,7 +307,7 @@ flowchart TD
         <ul>
           <li><code>src/collaboration/PresenceBar.tsx</code></li>
         </ul>
-        <blockquote><p>The real-time collaboration <strong>engine</strong> that these UI pieces consume — <code>useCollaboration</code>, <code>CollaborationSession</code>, <code>DocSync</code>, <code>CollabBinding</code>, and the shared <code>identity</code>/<code>types</code> modules under <code>src/collaboration/</code> — is not documented here; it warrants its own document (<code>/generate-docs collaboration</code>).</p></blockquote>
+        <blockquote><p>The real-time collaboration <strong>engine</strong> that these UI pieces consume — <code>useCollaboration</code>, <code>CollaborationSession</code>, <code>CollabDoc</code>, the Yjs binding (<code>BpmnYjsBinding</code> + <code>YModel</code>), <code>CollabBinding</code>, and the shared <code>identity</code>/<code>types</code> modules under <code>src/collaboration/</code> — is not documented here; it warrants its own document (<code>/generate-docs collaboration</code>).</p></blockquote>
       </section>
     </main>
     <aside class="toc"><p class="toc-title">On this page</p><nav></nav></aside>
