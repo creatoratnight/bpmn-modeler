@@ -16,7 +16,7 @@
     <main class="content">
       <p class="kicker">Data Dictionary</p>
       <h1>Services</h1>
-      <p class="lede">The <code>src/services/</code> directory contains every function that communicates with Firebase Realtime Database, Firebase Authentication, and the Microsoft Graph API, plus a set of pure browser-side helpers. React components import from these files rather than calling Firebase or browser APIs directly. Two files (<code>download.service.tsx</code>, <code>invites.service.tsx</code>) exist but are empty stubs with no exports.</p>
+      <p class="lede">The <code>src/services/</code> directory contains every function that communicates with Firebase Realtime Database, Firebase Authentication, and the Microsoft Graph API, plus a set of pure browser-side helpers. React components import from these files rather than calling Firebase or browser APIs directly. One file (<code>download.service.tsx</code>) exists but is an empty stub with no exports.</p>
 
       <section>
         <h2>1. models.service.tsx</h2>
@@ -87,10 +87,11 @@
           <thead><tr><th>RTDB path</th><th>Fields written</th></tr></thead>
           <tbody>
             <tr><td><code>/bpmnModels/{modelId}/milestones/{milestoneId}</code></td><td><code>name</code>, <code>description</code>, <code>createdBy: userId</code>, <code>createdAt</code></td></tr>
-            <tr><td><code>/milestoneData/{milestoneId}/xmlData</code></td><td><code>xmlData</code></td></tr>
+            <tr><td><code>/milestoneData/{milestoneId}</code></td><td><code>modelId</code>, <code>xmlData</code></td></tr>
           </tbody>
         </table></div>
         <p>Returns <code>Promise&lt;string&gt;</code> — the generated <code>milestoneId</code>.</p>
+        <blockquote><p><code>modelId</code> is the back-reference the security rules resolve access through: a snapshot keyed only by its own id cannot be tied to a project.</p></blockquote>
 
         <h3>getMilestones(modelId): Promise&lt;Milestone[]&gt;</h3>
         <p>Reads the metadata subtree <code>bpmnModels/{modelId}/milestones</code> in a single <code>get</code> call and returns items sorted <strong>newest-first</strong> by <code>createdAt</code>. The XML snapshots are <strong>not</strong> loaded here.</p>
@@ -169,20 +170,23 @@
         <p>Cascade-delete helper invoked when a project is permanently deleted.</p>
         <p><strong>Source:</strong> <code>src/services/projects.service.tsx</code></p>
 
-        <h3>deleteModelsAndInvites(projectId)</h3>
-        <p>Deletes all models, XML data, milestones, and invitations belonging to a project.</p>
+        <h3>deleteProjectCascade(projectId, userId)</h3>
+        <p>Deletes a project and everything hanging off it — models, XML data, milestone snapshots and invitations — as a <strong>single atomic multi-path update</strong>.</p>
         <div class="table-wrap"><table>
-          <thead><tr><th>Step</th><th>RTDB query</th><th>Removals per matched key</th></tr></thead>
+          <thead><tr><th>Step</th><th>RTDB query</th><th>Paths collected</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td><code>bpmnModels</code> where <code>projectId == projectId</code></td><td><code>bpmnModels/{key}</code> (includes the model's milestone metadata child), <code>modelXmlData/{key}</code>, <code>milestones/{key}</code> (legacy pre-migration layout), and <code>milestoneData/{milestoneId}</code> for each milestone under the model</td></tr>
-            <tr><td>2</td><td><code>invitations</code> where <code>projectId == projectId</code></td><td><code>invitations/{key}</code></td></tr>
+            <tr><td>1</td><td><code>projects/{projectId}</code> (read)</td><td>the member list, for clearing the reverse index</td></tr>
+            <tr><td>2</td><td><code>bpmnModels</code> where <code>projectId == projectId</code></td><td><code>bpmnModels/{key}</code> (includes the model's milestone metadata child), <code>modelXmlData/{key}</code>, <code>milestones/{key}</code> (legacy pre-migration layout), and <code>milestoneData/{milestoneId}</code> for each milestone under the model</td></tr>
+            <tr><td>3</td><td><code>invitations</code> where <code>projectId == projectId</code></td><td><code>invitations/{key}</code></td></tr>
+            <tr><td>4</td><td>—</td><td><code>users/{memberId}/projects/{projectId}</code> (every member when the caller is the owner, otherwise only their own) and finally <code>projects/{projectId}</code></td></tr>
           </tbody>
         </table></div>
         <p><strong>Validation / edge cases:</strong></p>
         <ul>
-          <li>The milestone XML snapshots (<code>milestoneData/{milestoneId}</code>) live outside the model node, so they are removed explicitly using the milestone IDs read from each model's <code>milestones</code> child.</li>
+          <li>Order and atomicity are load-bearing. Access to a model is resolved through its project and to XML/snapshots through their model, so deleting a parent before its dependants would leave them unreachable <em>and</em> make the security rules refuse the deletes that clean them up. One update authorises every path against the state before it, while the chain is still intact.</li>
+          <li>The milestone XML snapshots (<code>milestoneData/{milestoneId}</code>) live outside the model node, so they are collected explicitly using the milestone IDs read from each model's <code>milestones</code> child.</li>
           <li><code>comments/{key}</code> is <strong>not</strong> removed — comments are not cleaned up on project deletion.</li>
-          <li>Individual <code>remove</code> calls inside the <code>forEach</code> are fire-and-forget (no <code>await</code>); the returned promise resolves when the queries complete, not when all removes do.</li>
+          <li>Only the owner may clear <em>other</em> members' index entries (the rules allow exactly that); a non-owner member deleting a project clears only their own.</li>
         </ul>
       </section>
 
@@ -239,13 +243,38 @@
       </section>
 
       <section>
-        <h2>5. Empty stubs</h2>
-        <p>Two service files in <code>src/services/</code> contain no code:</p>
+        <h2>5. invites.service.tsx</h2>
+        <p>Derives the database key of an invitation. Invitations are keyed deterministically by project + invited address rather than by a push id, because the security rules must be able to <em>find</em> the invitation that authorises a user to add themselves to a project's members — and rules cannot search, so the key has to be derivable from the project id and <code>auth.token.email</code>. A deterministic key also makes inviting idempotent, which removes any need to read other people's invitations to check for a duplicate.</p>
+        <p><strong>Source:</strong> <code>src/services/invites.service.tsx</code></p>
+
+        <h3>encodeEmailKey(email): string</h3>
+        <p>Lower-cases the address and escapes every character the Realtime Database forbids in a key, in this order:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Character</th><th>Escaped as</th></tr></thead>
+          <tbody>
+            <tr><td><code>%</code></td><td><code>%25</code></td></tr>
+            <tr><td><code>.</code></td><td><code>,</code></td></tr>
+            <tr><td><code>#</code></td><td><code>%23</code></td></tr>
+            <tr><td><code>$</code></td><td><code>%24</code></td></tr>
+            <tr><td><code>[</code></td><td><code>%5B</code></td></tr>
+            <tr><td><code>]</code></td><td><code>%5D</code></td></tr>
+            <tr><td><code>/</code></td><td><code>%2F</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><code>%</code> is escaped first so the mapping stays injective — otherwise <code>a%23b@x</code> and <code>a#b@x</code> would collide, and a collision would hand one address the invitation belonging to another.</p>
+
+        <h3>invitationKey(projectId, email): string</h3>
+        <p>Returns <code>`${projectId}_${encodeEmailKey(email)}`</code>.</p>
+        <blockquote><p>This escaping is mirrored by the <code>.replace()</code> chains in <code>database.rules.json</code> and by <code>functions/scripts/migrate-security-backfill.js</code>. All three must change together.</p></blockquote>
+      </section>
+
+      <section>
+        <h2>6. Empty stubs</h2>
+        <p>One service file in <code>src/services/</code> contains no code:</p>
         <div class="table-wrap"><table>
           <thead><tr><th>File</th><th>Status</th></tr></thead>
           <tbody>
             <tr><td><code>src/services/download.service.tsx</code></td><td>Empty — no exports</td></tr>
-            <tr><td><code>src/services/invites.service.tsx</code></td><td>Empty — no exports</td></tr>
           </tbody>
         </table></div>
       </section>
@@ -258,6 +287,8 @@ flowchart TD
     A --> C[user.service.tsx]
     A --> D[projects.service.tsx]
     A --> E[utils.service.tsx]
+    A --> M[invites.service.tsx]
+    M -->|derives key| N["invitations/{projectId}_{encoded email}"]
 
     B -->|RTDB update| F["/bpmnModels/{id}\n/modelXmlData/{id}"]
     B -->|RTDB update/get| G["bpmnModels/{modelId}/milestones\nmilestoneData/{milestoneId}"]

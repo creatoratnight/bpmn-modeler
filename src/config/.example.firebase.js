@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, connectAuthEmulator, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { getDatabase, ref, set, child, get, connectDatabaseEmulator } from 'firebase/database';
 
 const useEmulator = import.meta.env.VITE_FIREBASE_EMULATOR === 'true';
@@ -41,7 +41,7 @@ const microsoftProvider = new OAuthProvider('microsoft.com');
 if (useEmulator) {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectDatabaseEmulator(getDatabase(app), '127.0.0.1', 9000);
-    window.__E2E_AUTH__ = { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword };
+    window.__E2E_AUTH__ = { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile };
 }
 
 export { auth, GoogleAuthProvider, microsoftProvider, signInWithPopup };

@@ -19,6 +19,12 @@ export interface PeerIdentity {
 export interface Peer extends PeerIdentity {
     joinedAt?: number;
     lastActive?: number;
+    /**
+     * Set while this peer has stepped away from their window: they have stopped
+     * publishing a cursor, and past a longer pause they stop following the
+     * session altogether until they come back (see IdleDetector).
+     */
+    idle?: boolean;
 }
 
 /**

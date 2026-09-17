@@ -94,6 +94,8 @@ Both functions rely on two environment variables that are resolved from `src/con
 | `npm run emulate` | Runs `sync-config` then builds and starts the local Firebase Emulator |
 | `npm run test` | Runs `sync-config` (to inject env vars) then Jest |
 | `npm run migrate-milestones` | Runs the milestone data migration (see section 5) |
+| `npm run migrate-security-backfill` | Runs the security-rules backfill against a live database (see section 6) |
+| `npm run migrate-export-file` | Runs the same backfill against an exported JSON file (see section 6) |
 
 **Source:** `functions/scripts/deploy.js`, `functions/scripts/sync-config.js`, `functions/scripts/start-emulator.js`
 
@@ -106,7 +108,7 @@ A one-off data migration that moves milestones from the legacy layout (everythin
 | Path | Contents |
 |------|----------|
 | `bpmnModels/{modelId}/milestones/{milestoneId}` | Metadata: `name`, `description`, `createdBy`, `createdAt` |
-| `milestoneData/{milestoneId}/xmlData` | The XML snapshot, keyed by the same milestone ID |
+| `milestoneData/{milestoneId}` | `modelId` + the XML snapshot, keyed by the same milestone ID |
 
 **Source:** `functions/scripts/migrate-milestones.js`
 
@@ -118,6 +120,43 @@ A one-off data migration that moves milestones from the legacy layout (everythin
 |------|--------|
 | `--dry-run` | Report the paths that would be written/deleted without writing anything. |
 | `--keep-legacy` | Leave the old `milestones/` node in place (default deletes it after copying). |
+
+---
+
+## 6. Security-rules backfill
+
+A one-off migration for data that predates what the tightened security rules resolve access through. Without it, that data is unreachable — the rules cannot authorise what they cannot resolve.
+
+It has **two entry points over one shared transform**, so they cannot drift:
+
+| Entry point | Applies the change to | Source |
+|-------------|----------------------|--------|
+| `npm run migrate-security-backfill` | A live database, as one atomic multi-path update | `functions/scripts/migrate-security-backfill.js` |
+| `npm run migrate-export-file` | An exported JSON file, offline (export → migrate → re-import) | `functions/scripts/migrate-export-file.js` |
+
+**Source (shared transform):** `functions/scripts/lib/security-backfill.js` — `planBackfill(root)` decides what should change and returns flat `path -> value` updates (a `null` means delete), which is both what a multi-path `update()` takes and what `applyUpdates(root, updates)` applies to a tree in memory. Nothing in it touches Firebase.
+
+| Step | Change | Why |
+|------|--------|-----|
+| 1 | `milestoneData/{milestoneId}` gains `modelId`, recovered from `bpmnModels/{modelId}/milestones` | A snapshot keyed by its own id alone cannot be tied to a project. |
+| 2 | Invitations move from push ids to `{projectId}_{encoded email}` | Accepting an invitation adds you to a project's members, and the rules must find the invitation that authorises it. Rules cannot search, so the key has to be derivable from the project and `auth.token.email`. |
+
+- Uses `firebase-admin`; `projectId` / `databaseURL` are read from `src/config/.firebase.js` via `read-firebase-config.js`.
+- **Target:** same as section 5 — `FIREBASE_DATABASE_EMULATOR_HOST` for the emulator, otherwise Application Default Credentials.
+- **Run it before deploying the rules.** It only adds and re-keys data, so it is safe against the old rules and leaves the database ready for the new ones.
+- **Idempotent:** a re-run finds nothing left to do.
+- Snapshots belonging to no model are reported and left untouched — they were already unreachable through the app.
+- Where several invitations exist for one project + address, a `Pending` one wins, otherwise the most recent; the rest are deleted as duplicates.
+- The email escaping mirrors `src/services/invites.service.tsx` and the `.replace()` chains in `database.rules.json`; all three must change together.
+
+| Flag | Effect | Entry point |
+|------|--------|-------------|
+| `--dry-run` | Report the paths that would be written/deleted without writing anything. | both |
+| `--keep-sessions` | Keep the ephemeral `sessions/` subtree instead of dropping it. | file only |
+
+**The file entry point** takes `<export.json> [migrated.json]`, never modifies its input (keep it as the rollback), and additionally drops the ephemeral `sessions/` subtree — live collaboration state that is recreated as people open models.
+
+> ⚠ Importing a JSON export **replaces** the node it is imported into; it is a set, not a merge. Anything written between the export and the import is lost, so export, migrate and import back-to-back with nobody editing. The live entry point has no such window, since it merges.
 
 ---
 
@@ -164,4 +203,7 @@ flowchart TD
 - `functions/scripts/sync-config.js`
 - `functions/scripts/start-emulator.js`
 - `functions/scripts/migrate-milestones.js`
+- `functions/scripts/migrate-security-backfill.js`
+- `functions/scripts/migrate-export-file.js`
+- `functions/scripts/lib/security-backfill.js`
 - `functions/jest.setup.js`

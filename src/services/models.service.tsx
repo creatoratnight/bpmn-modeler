@@ -60,9 +60,14 @@ export const saveDMNodel = (model) => {
 
 // Milestones are stored as two parts:
 //   - lightweight metadata under the model:  bpmnModels/{modelId}/milestones/{milestoneId}
-//   - the heavy XML snapshot on its own:      milestoneData/{milestoneId}/xmlData
+//   - the heavy XML snapshot on its own:      milestoneData/{milestoneId}
 // This lets the list be shown from the model data alone (name/description/date),
 // while the XML is only fetched when a milestone is actually loaded.
+//
+// The snapshot carries `modelId` back to its model. That is what lets the
+// security rules scope it to the model's project — a snapshot keyed only by its
+// own id cannot be tied to a project, and would have to be readable by every
+// signed-in user.
 export const saveMilestone = async (modelId, name, description, xmlData, userId) => {
     const db = getDatabase();
     const milestoneId = push(ref(db, `milestoneData`)).key;
@@ -74,7 +79,7 @@ export const saveMilestone = async (modelId, name, description, xmlData, userId)
         createdBy: userId,
         createdAt: new Date().toISOString()
     };
-    updates[`/milestoneData/${milestoneId}/xmlData`] = xmlData;
+    updates[`/milestoneData/${milestoneId}`] = { modelId, xmlData };
 
     await update(ref(db), updates);
     return milestoneId;
@@ -153,7 +158,7 @@ export const migrateMilestones = async ({ keepLegacy = false } = {}) => {
                 createdBy: createdBy ?? null,
                 createdAt: createdAt ?? null
             };
-            updates[`/milestoneData/${milestoneId}/xmlData`] = xmlData ?? null;
+            updates[`/milestoneData/${milestoneId}`] = xmlData ? { modelId, xmlData } : null;
 
             milestones += 1;
         }

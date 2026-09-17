@@ -20,3 +20,19 @@ export function decompressFromBase64(base64: string): string {
     const bytes = new Uint8Array(decode(base64));
     return pako.ungzip(bytes, { to: 'string' });
 }
+
+// Yjs document updates are already-compact binary (Uint8Array). We gzip them too
+// before base64 for the RTDB string value: it keeps the occasional large update
+// (a full-state seed) small, and costs little on the tiny incremental ones.
+
+/** Gzip binary bytes and base64-encode them for storage as an RTDB string. */
+export function gzipBytesToBase64(bytes: Uint8Array): string {
+    const gz = pako.gzip(bytes);
+    const buffer = gz.buffer.slice(gz.byteOffset, gz.byteOffset + gz.byteLength);
+    return encode(buffer);
+}
+
+/** Inverse of {@link gzipBytesToBase64}. */
+export function base64ToGunzipBytes(base64: string): Uint8Array {
+    return pako.ungzip(new Uint8Array(decode(base64)));
+}

@@ -5,7 +5,8 @@ import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
 import minimapModule from 'diagram-js-minimap';
 import { CollabBinding } from '../collaboration/CollabBinding';
-import { DocSync } from '../collaboration/DocSync';
+import { CollabDoc } from '../collaboration/CollabDoc';
+import { IdleDetector, type IdleThresholds } from '../collaboration/IdleDetector';
 
 
 const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onViewPositionChange, collabSession }, ref) => {
@@ -67,11 +68,29 @@ const BPMNModelerComponent = forwardRef(({ xml, viewPosition, onModelChange, onV
     // own effect because `collabSession` arrives on the render *after* mount.
     useEffect(() => {
         if (!isReady || !collabSession || !modelerInstance.current) return;
-        const binding = new CollabBinding(modelerInstance.current, collabSession);
+        // One activity detector for both consumers, so the presence overlay and
+        // the shared document step away from (and come back to) the session
+        // together. Started last: subscribing fires the current state at each.
+        const isE2E = import.meta.env.VITE_FIREBASE_EMULATOR === 'true';
+        // E2E only: let a test shorten the idle tiers to seconds and watch the
+        // state, the same way __E2E_BPMN__ exposes the modeler.
+        const e2e = window as unknown as {
+            __E2E_IDLE_MS__?: Partial<IdleThresholds>;
+            __E2E_IDLE__?: IdleDetector;
+        };
+        const idle = new IdleDetector(isE2E ? e2e.__E2E_IDLE_MS__ : undefined);
+        const binding = new CollabBinding(modelerInstance.current, collabSession, idle);
         binding.start();
-        const docSync = new DocSync(modelerInstance.current, collabSession);
-        docSync.start();
-        return () => { binding.stop(); docSync.stop(); };
+        const collabDoc = new CollabDoc(modelerInstance.current, collabSession, idle);
+        collabDoc.start();
+        idle.start();
+        if (isE2E) e2e.__E2E_IDLE__ = idle;
+        return () => {
+            if (isE2E) delete e2e.__E2E_IDLE__;
+            idle.stop();
+            binding.stop();
+            collabDoc.stop();
+        };
     }, [isReady, collabSession]);
 
     useImperativeHandle(ref, () => ({

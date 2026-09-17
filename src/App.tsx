@@ -47,7 +47,10 @@ function App() {
         return saved ? parseInt(saved, 10) : 250;
     });
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
-    const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+    // Where to go once the "save your changes?" modal is answered. It carries the
+    // side-panel intent along with the path, because that intent is a one-shot
+    // flag that must not be armed while the modal is still open.
+    const [pendingNavigation, setPendingNavigation] = useState<{ path: string; fromSidePanel: boolean } | null>(null);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState(false);
@@ -258,10 +261,16 @@ function App() {
         if (userProjectsSnapshot.exists()) {
             const userProjectsIds = Object.keys(userProjectsSnapshot.val());
 
+            // A read the security rules deny resolves as a rejection, and one
+            // unreadable id must not take the whole list down with it: a project id
+            // can linger in this index after the project is deleted, and a model or
+            // member can become unreadable when access is withdrawn.
+            const getOrNull = (path) => get(ref(db, path)).catch(() => null);
+
             // Fetch only the specific projects this user belongs to
-            const projectsPromises = userProjectsIds.map((projectId) => get(ref(db, `projects/${projectId}`)));
+            const projectsPromises = userProjectsIds.map((projectId) => getOrNull(`projects/${projectId}`));
             const projectsSnapshots = await Promise.all(projectsPromises);
-            const validProjectSnapshots = projectsSnapshots.filter((snapshot) => snapshot.exists());
+            const validProjectSnapshots = projectsSnapshots.filter((snapshot) => snapshot?.exists());
 
             // Collect only the member IDs and model IDs we actually need
             const allMemberIds = new Set<string>();
@@ -274,15 +283,15 @@ function App() {
 
             // Fetch only the specific users and models needed, in parallel
             const [usersResults, modelsResults] = await Promise.all([
-                Promise.all([...allMemberIds].map(id => get(ref(db, `users/${id}`)))),
-                Promise.all([...allModelIds].map(id => get(ref(db, `bpmnModels/${id}`))))
+                Promise.all([...allMemberIds].map(id => getOrNull(`users/${id}`))),
+                Promise.all([...allModelIds].map(id => getOrNull(`bpmnModels/${id}`)))
             ]);
 
             const usersData: Record<string, any> = {};
-            usersResults.forEach(snap => { if (snap.exists()) usersData[snap.key!] = snap.val(); });
+            usersResults.forEach(snap => { if (snap?.exists()) usersData[snap.key!] = snap.val(); });
 
             const bpmnModelsData: Record<string, any> = {};
-            modelsResults.forEach(snap => { if (snap.exists()) bpmnModelsData[snap.key!] = snap.val(); });
+            modelsResults.forEach(snap => { if (snap?.exists()) bpmnModelsData[snap.key!] = snap.val(); });
 
             const userProjects = validProjectSnapshots.map((snapshot) => {
                     const projectId = snapshot.key;
@@ -439,12 +448,23 @@ function App() {
         }
     }, [location.pathname, isProjectsLoaded, projects, user]);
 
-    const handleNavigation = (path: string) => {
+    /**
+     * Navigate, arming the one-shot side-panel intent first. `fromSidePanel`
+     * keeps the editor open for a folder hop taken from the side panel instead of
+     * dropping to the project view; every other navigation clears it, so a stale
+     * intent can never leak into the next one.
+     */
+    const navigateTo = (path: string, { fromSidePanel = false } = {}) => {
+        sidePanelNavRef.current = fromSidePanel;
+        navigate(path);
+    };
+
+    const handleNavigation = (path: string, { fromSidePanel = false } = {}) => {
         if (changes) {
-            setPendingNavigation(path);
+            setPendingNavigation({ path, fromSidePanel });
             setIsSaveModalOpen(true);
         } else {
-            navigate(path);
+            navigateTo(path, { fromSidePanel });
         }
     };
 
@@ -520,23 +540,23 @@ function App() {
         handleNavigation('/project/' + encodeURIComponent(project.name) + '/folder/' + encodeURIComponent(folder.name));
     }
 
+    const completePendingNavigation = () => {
+        if (!pendingNavigation) return;
+        navigateTo(pendingNavigation.path, { fromSidePanel: pendingNavigation.fromSidePanel });
+        setPendingNavigation(null);
+    }
+
     const handleOnSave = (model) => {
         saveBPMNModel(model);
         setChanges(false);
         setIsSaveModalOpen(false);
-        if (pendingNavigation) {
-            navigate(pendingNavigation);
-            setPendingNavigation(null);
-        }
+        completePendingNavigation();
     }
 
     const handleOnDiscard = () => {
         setChanges(false);
         setIsSaveModalOpen(false);
-        if (pendingNavigation) {
-            navigate(pendingNavigation);
-            setPendingNavigation(null);
-        }
+        completePendingNavigation();
     }
 
     const onLogoutClick = () => {
@@ -632,15 +652,13 @@ function App() {
 
         if (item.type === 'dmn') return;
 
-        if (changes) {
-            toastr.warning("You have unsaved changes. Please save them before switching models.");
-            return;
-        }
-
+        // Unsaved changes are handled by handleNavigation, which offers the same
+        // save-or-discard modal as leaving the editor from the top navigation.
         let path = '';
+        let fromSidePanel = false;
         if (item.type === 'folder' || item.type === 'folderUp') {
             // Quick-nav within the editor: re-scope the side panel, stay in the modeler.
-            sidePanelNavRef.current = true;
+            fromSidePanel = true;
             if (item.type === 'folderUp') {
                 path = '/project/' + encodeURIComponent(project.name);
             } else {
@@ -649,7 +667,7 @@ function App() {
         } else {
             path = '/project/' + encodeURIComponent(project.name) + '/model/' + item.id;
         }
-        handleNavigation(path);
+        handleNavigation(path, { fromSidePanel });
     };
 
     const handleAddComment = async (text) => {
@@ -751,7 +769,7 @@ function App() {
           </Modal>
           <Tile className="header">
               <div className="header-logo">
-                  <img src="/valtimo-designer-logo.png" alt="valtimo academy logo"/>
+                  <img src={config.logoUrl} alt={`${config.appTitle} logo`}/>
               </div>
               <div className="header-nav">
                   {user && <div className="nav-projects-folder" onClick={onMyProjectsNavClick}>
@@ -1030,9 +1048,9 @@ function App() {
                       </div>
                   )}
                   {!user && <div className="welcome-wrapper">
-                      <img src="/valtimo-designer-logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
+                      <img src={config.logoUrl} alt={`${config.appTitle} logo`} className='welcome-logo'/>
                       <div className="welcome-title">
-                          Welcome to BPMN Modeler!
+                          Welcome to {config.appTitle}!
                       </div>
                       <div className="welcome-subtitle">
                           the open-source BPMN & DMN modeling collaboration tool

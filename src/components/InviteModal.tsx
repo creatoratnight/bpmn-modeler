@@ -1,7 +1,8 @@
 import React, {useState} from "react";
-import {getDatabase, push, ref, set, get, query, orderByChild, equalTo, limitToFirst} from "firebase/database";
+import {getDatabase, ref, set, get, query, orderByChild, equalTo, limitToFirst} from "firebase/database";
 import toastr from 'toastr';
 import {Modal, TextInput} from "@carbon/react";
+import {invitationKey} from "../services/invites.service";
 
 const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
     const [inviteEmail, setInviteEmail] = useState('');
@@ -13,20 +14,18 @@ const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
     const handleInvite = async () => {
         const db = getDatabase();
 
-        const invitationsRef = ref(db, 'invitations');
-        // Query by invitedEmail (a specific value) rather than by projectId (potentially many results)
-        // then filter by projectId client-side — far fewer records travel over the wire
-        const duplicateQuery = query(invitationsRef, orderByChild('invitedEmail'), equalTo(inviteEmail));
+        // Look for a pending invitation among *this project's* invitations. The
+        // security rules authorise that query for a member of the project; they do
+        // not allow searching by an address, which would mean reading invitations
+        // addressed to other people. A project's invitation list is short.
+        const invitationId = invitationKey(projectId, inviteEmail);
 
         try {
-            const snapshot = await get(duplicateQuery);
-            if (snapshot.exists()) {
-                const invites = snapshot.val();
-                const isDuplicate = Object.values(invites).some((invite: any) => invite.projectId === projectId && invite.status === 'Pending');
-                if (isDuplicate) {
-                    toastr.warning('An invitation is already pending for this email address.');
-                    return;
-                }
+            const projectInvites = query(ref(db, 'invitations'), orderByChild('projectId'), equalTo(projectId));
+            const snapshot = await get(projectInvites);
+            if (snapshot.child(invitationId).child('status').val() === 'Pending') {
+                toastr.warning('An invitation is already pending for this email address.');
+                return;
             }
         } catch (error) {
             toastr.error('Error checking for duplicates:', error);
@@ -54,11 +53,9 @@ const InviteModal = ({ isOpen, onClose, projectId, userId }) => {
             return;
         }
 
-        const newInvitationRef = push(ref(db, 'invitations'));
-
-        set(newInvitationRef, {
+        set(ref(db, `invitations/${invitationId}`), {
             projectId: projectId,
-            invitedEmail: inviteEmail,
+            invitedEmail: inviteEmail.toLowerCase(),
             senderId: userId,
             status: 'Pending',
             sentAt: new Date().toISOString()

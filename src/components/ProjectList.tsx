@@ -37,7 +37,7 @@ import {
     renderMembersCell,
     sortRows
 } from '../services/utils.service.tsx';
-import {deleteModelsAndInvites} from '../services/projects.service.tsx';
+import {deleteProjectCascade} from '../services/projects.service.tsx';
 import {getModelMilestoneIds} from '../services/models.service.tsx';
 import AddFolderModal from './AddFolderModal.tsx';
 import RenameFolderModal from './RenameFolderModal.tsx';
@@ -495,10 +495,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                     let senderEmail = 'Unknown';
                     let projectName = 'Unknown';
 
-                    // Fetch sender and project in parallel instead of sequentially
+                    // Fetch sender and project in parallel instead of sequentially.
+                    // Only the project's *name* is read: an invitee is not a member
+                    // yet, and membership is what grants access to the project node.
                     const [senderSnapshot, projectSnapshot] = await Promise.allSettled([
                         get(ref(db, `users/${invitation.senderId}`)),
-                        get(ref(db, `projects/${invitation.projectId}`))
+                        get(ref(db, `projects/${invitation.projectId}/name`))
                     ]);
 
                     if (senderSnapshot.status === 'fulfilled' && senderSnapshot.value.exists()) {
@@ -508,7 +510,7 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
                     }
 
                     if (projectSnapshot.status === 'fulfilled' && projectSnapshot.value.exists()) {
-                        projectName = projectSnapshot.value.val().name || 'Unknown';
+                        projectName = projectSnapshot.value.val() || 'Unknown';
                     }
 
                     return {
@@ -637,11 +639,9 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
     }
 
     const onDeleteProject = () => {
-        const db = getDatabase();
-        const modelRef = ref(db, `projects/${currentProject.id}`);
-
-        remove(modelRef).then(() => {
-            deleteModelsAndInvites(currentProject.id);
+        // The project node itself is removed as part of the cascade, last, so its
+        // models and their data are still reachable while they are being deleted.
+        deleteProjectCascade(currentProject.id, user.uid).then(() => {
             toastr.success('Project deleted successfully');
             fetchUserProjects();
             setIsConfirmModalOpen(false);
@@ -675,9 +675,12 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
         updates['/invitations/' + invitationId + '/status'] = 'Accepted';
         updates['/projects/' + projectId + '/members/' + userId] = 'editor';
         updates['/users/' + userId + '/projects/' + projectId] = true;
-        updates['/projects/' + projectId + '/updatedAt'] = new Date().toISOString();
 
         update(ref(db), updates).then(() => {
+            // Touching the project itself has to wait until the membership write
+            // has landed: security rules evaluate every path of a multi-path
+            // update against the state *before* it, where we are not a member yet.
+            updateLastChangedDate(projectId);
             toastr.success('Invitation accepted and user added to project');
             setIsInviteModalOpen(false);
             fetchInvites();
@@ -728,7 +731,8 @@ const ProjectList = ({user, viewMode, currentProject, selectedFolder, onOpenMode
 
         remove(userProjectRef);
         remove(memberRef).then(() => {
-            updateLastChangedDate(projectId);
+            // No `updateLastChangedDate` here: the project is no longer ours to
+            // write to once we have left it, and the rules say so.
             fetchUserProjects();
             setIsConfirmModalOpen(false);
             toastr.success(`Successfully left the project`);

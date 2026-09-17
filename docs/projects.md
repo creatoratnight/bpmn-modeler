@@ -116,11 +116,14 @@ The XML snapshot is stored separately, keyed by the milestone ID, and fetched on
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `modelId` | `string` | Yes | The model this snapshot belongs to. |
 | `xmlData` | `string` | Yes | Full XML snapshot of the model at this point. |
 
-**RTDB path:** `milestoneData/{milestoneId}/xmlData`
+**RTDB path:** `milestoneData/{milestoneId}`
 
-> **Migration:** data in the legacy layout `milestones/{modelId}/{milestoneId}` (which embedded `xmlData` inline) is moved to this split layout by `functions/scripts/migrate-milestones.js`, preserving milestone IDs.
+> `modelId` is a back-reference, not a convenience: access to a snapshot is resolved through its model to that model's project, so a snapshot without it cannot be scoped at all and has to fall back to "any signed-in user".
+
+> **Migration:** data in the legacy layout `milestones/{modelId}/{milestoneId}` (which embedded `xmlData` inline) is moved to this split layout by `functions/scripts/migrate-milestones.js`, preserving milestone IDs. Snapshots written before `modelId` existed are backfilled by `functions/scripts/migrate-security-backfill.js`.
 
 ---
 
@@ -145,7 +148,7 @@ A text comment attached to a model.
 
 A pending, accepted, or declined invitation to join a project.
 
-**Source:** `src/components/InviteModal.tsx`, `src/components/ProjectList.tsx`
+**Source:** `src/components/InviteModal.tsx`, `src/components/ProjectList.tsx`, `src/services/invites.service.tsx`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -155,14 +158,17 @@ A pending, accepted, or declined invitation to join a project.
 | `status` | `InvitationStatus` | Yes | Lifecycle state. |
 | `sentAt` | `string` (ISO 8601) | Yes | When the invite was sent. |
 
-**RTDB path:** `invitations/{invitationId}`
+**RTDB path:** `invitations/{projectId}_{encoded invitedEmail}` — a deterministic key, not a push id. See `invitationKey` in [services.md](services.md) for the encoding.
 
 **Validation:**
-- `invitedEmail` must match `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`.
-- A second `Pending` invite to the same email + project is blocked (deduplication checked before write).
+- `invitedEmail` must match `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`, and is stored lower-case.
+- The key must match the `projectId` and `invitedEmail` the record claims — enforced by the security rules, because the membership rule authorises against whatever invitation sits at that key.
+- A second `Pending` invite to the same email + project is blocked. The check queries *this project's* invitations (the shape the rules allow a member) rather than searching by address; the deterministic key means a re-invite rewrites the same node either way.
 - If the invitee is already a member of the project, the invite is blocked.
-- Accepting sets `status → 'Accepted'` and adds the user to `projects/{id}/members/{uid}` as `'editor'`.
+- Accepting sets `status → 'Accepted'` and adds the user to `projects/{id}/members/{uid}` as `'editor'`. This is the only way to gain access to another user's project: the rules let a user add **themselves** to a project exactly when a `Pending` invitation exists at the key derived from that project and their own verified email.
 - Declining sets `status → 'Declined'`; the document is not removed.
+
+> **Migration:** invitations created under the previous push-id keys are re-keyed by `functions/scripts/migrate-security-backfill.js`. Where several exist for one project + address, a `Pending` one wins, otherwise the most recent; the rest are dropped.
 
 ---
 

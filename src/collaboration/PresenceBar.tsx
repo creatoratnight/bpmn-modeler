@@ -16,7 +16,9 @@ function initials(name: string): string {
 
 /**
  * A stacked row of avatars showing who else is editing the current model, each
- * ringed in that person's cursor color. Renders nothing when you are alone.
+ * ringed in that person's cursor color. Someone who has stepped away from their
+ * window is dimmed, so the bar shows who is actually working rather than who
+ * happens to have the model open. Renders nothing when you are alone.
  * Purely presentational — it is driven by the `peers` from `useCollaboration`.
  */
 const PresenceBar: React.FC<PresenceBarProps> = ({ peers, max = 5 }) => {
@@ -30,7 +32,7 @@ const PresenceBar: React.FC<PresenceBarProps> = ({ peers, max = 5 }) => {
             {shown.map((peer, i) => (
                 <div
                     key={peer.uid}
-                    title={peer.name}
+                    title={peer.idle ? `${peer.name} (away)` : peer.name}
                     style={{
                         width: 28,
                         height: 28,
@@ -39,6 +41,8 @@ const PresenceBar: React.FC<PresenceBarProps> = ({ peers, max = 5 }) => {
                         border: `2px solid ${peer.color}`,
                         boxShadow: '0 0 0 1px #fff',
                         background: peer.color,
+                        opacity: peer.idle ? 0.4 : 1,
+                        filter: peer.idle ? 'grayscale(1)' : undefined,
                         color: '#fff',
                         display: 'flex',
                         alignItems: 'center',
