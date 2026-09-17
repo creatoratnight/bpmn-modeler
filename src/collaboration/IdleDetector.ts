@@ -5,13 +5,21 @@
  * Three states, each one a cost tier:
  *
  *   - `active`  — interacted within `idleAfterMs`. Everything runs.
- *   - `idle`    — no interaction since then, or the tab is hidden. The cursor
- *                 stream stops (it is the highest-frequency channel we have) and
- *                 presence is flagged so peers can see the person stepped away.
- *   - `away`    — untouched for `awayAfterMs`, or hidden for `hiddenAwayMs`. The
- *                 heavy *incoming* subscriptions are detached as well, so a
- *                 parked window stops being a fan-out target for everyone who is
- *                 still working, and it gives up the persistence leadership.
+ *   - `idle`    — no interaction since then, but the tab is still on screen. Only
+ *                 our own cursor stream stops (there is nothing to send anyway
+ *                 while the pointer is still) and presence is flagged, so peers
+ *                 can see the person has stepped away from the keyboard.
+ *   - `away`    — the tab has been hidden for `hiddenAwayMs`. Now the incoming
+ *                 subscriptions are detached too, so a backgrounded window stops
+ *                 being a fan-out target for everyone still working, and it gives
+ *                 up the persistence leadership.
+ *
+ * **Only hiding a tab reaches `away`, never inactivity alone.** Someone watching
+ * a second window while a colleague edits is not interacting with it, but they
+ * are very much looking at it, and a collaboration tool that quietly stops
+ * delivering changes to a window on screen is simply broken. Visibility is the
+ * one signal that actually distinguishes "nobody can see this" from "nobody is
+ * typing right now", so it is the only thing allowed to stop the document.
  *
  * The detector itself does no I/O; it only reports transitions. The one timer it
  * keeps sleeps until the next state deadline rather than polling, so an `away`
@@ -25,19 +33,16 @@
  */
 export type ActivityState = 'active' | 'idle' | 'away';
 
-/** How long a window may sit untouched before it drops to each tier. */
+/** How long a window may sit before it drops to each tier. */
 export interface IdleThresholds {
-    /** No interaction for this long → `idle` (cursor stream stops). */
+    /** No interaction for this long, while still on screen → `idle`. */
     idleAfterMs: number;
-    /** No interaction for this long → `away` (incoming subscriptions detach). */
-    awayAfterMs: number;
-    /** Hidden this long → `away`, sooner than a visible-but-untouched window. */
+    /** Hidden for this long → `away`. The only route to `away`. */
     hiddenAwayMs: number;
 }
 
 export const DEFAULT_IDLE_THRESHOLDS: IdleThresholds = {
     idleAfterMs: 60_000,
-    awayAfterMs: 5 * 60_000,
     hiddenAwayMs: 60_000,
 };
 
@@ -147,24 +152,32 @@ export class IdleDetector {
     };
 
     private computeState(now: number): ActivityState {
-        const { idleAfterMs, awayAfterMs, hiddenAwayMs } = this.thresholds;
+        const { idleAfterMs, hiddenAwayMs } = this.thresholds;
+        // Hidden is the only way to `away`: see the note on this class.
         if (this.hiddenSince !== null) {
             return now - this.hiddenSince >= hiddenAwayMs ? 'away' : 'idle';
         }
-        const elapsed = now - this.lastActivityAt;
-        if (elapsed >= awayAfterMs) return 'away';
-        if (elapsed >= idleAfterMs) return 'idle';
-        return 'active';
+        return now - this.lastActivityAt >= idleAfterMs ? 'idle' : 'active';
     }
 
-    /** Sleep until the next possible transition — `away` needs no timer at all. */
+    /**
+     * Sleep until the next possible transition. `away` has nothing left to wait
+     * for, and neither does a visible window that has already gone `idle` — from
+     * there only real input or the tab being hidden changes anything, and both
+     * arrive as events.
+     */
     private schedule(now: number): void {
         if (this.timer) { clearTimeout(this.timer); this.timer = null; }
         if (this.state === 'away') return;
-        const { idleAfterMs, awayAfterMs, hiddenAwayMs } = this.thresholds;
-        const deadline = this.hiddenSince !== null
-            ? this.hiddenSince + hiddenAwayMs
-            : this.lastActivityAt + (this.state === 'active' ? idleAfterMs : awayAfterMs);
+        const { idleAfterMs, hiddenAwayMs } = this.thresholds;
+        let deadline: number;
+        if (this.hiddenSince !== null) {
+            deadline = this.hiddenSince + hiddenAwayMs;
+        } else if (this.state === 'active') {
+            deadline = this.lastActivityAt + idleAfterMs;
+        } else {
+            return; // visible and idle — nothing further is on a clock
+        }
         this.timer = setTimeout(this.applyState, Math.max(0, deadline - now));
     }
 }

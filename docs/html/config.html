@@ -20,21 +20,24 @@
 
       <section>
         <h2>1. Application config</h2>
-        <p>A single exported object in <code>src/config/config.js</code> that controls feature flags and the application version string. It is a plain JS object with no external dependencies.</p>
+        <p>A single exported object in <code>src/config/config.js</code> that controls branding, feature flags and the application version string. It is a plain JS object with no external dependencies, committed to the repo — unlike <code>.firebase.js</code>, it holds no credentials.</p>
         <p><strong>Source:</strong> <code>src/config/config.js</code></p>
         <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>bpmnModelerVersion</code></td><td><code>string</code></td><td><code>"0.5.1"</code></td><td>Human-readable application version, displayed in the UI header.</td></tr>
+            <tr><td><code>appTitle</code></td><td><code>string</code></td><td><code>"Valtimo Designer"</code></td><td>The application's name. Sets the browser tab title (assigned in <code>src/main.tsx</code> at startup), the sign-in heading (<code>Welcome to {appTitle}!</code>), and the <code>alt</code> text of both logo images.</td></tr>
+            <tr><td><code>logoUrl</code></td><td><code>string</code></td><td><code>"/valtimo-designer-logo.png"</code></td><td>The logo shown in the header and on the sign-in screen. A path under <code>public/</code> or an absolute URL.</td></tr>
+            <tr><td><code>bpmnModelerVersion</code></td><td><code>string</code></td><td><code>"0.6.0"</code></td><td>Human-readable application version, displayed in the UI footer.</td></tr>
             <tr><td><code>enableGoogleSignIn</code></td><td><code>boolean</code></td><td><code>true</code></td><td>When <code>true</code>, the "Sign in with Google" button is rendered in the sign-in view.</td></tr>
             <tr><td><code>enableMicrosoftSignIn</code></td><td><code>boolean</code></td><td><code>true</code></td><td>When <code>true</code>, the "Sign in with Microsoft" button is rendered in the sign-in view.</td></tr>
           </tbody>
         </table></div>
         <p><strong>Validation:</strong></p>
         <ul>
-          <li>All three fields have no runtime validation — they are read directly wherever needed.</li>
+          <li>No field has runtime validation — each is read directly wherever it is needed.</li>
           <li>Setting both <code>enableGoogleSignIn</code> and <code>enableMicrosoftSignIn</code> to <code>false</code> results in no sign-in options being shown.</li>
         </ul>
+        <blockquote><p><code>index.html</code> also carries a <code>&lt;title&gt;</code>, but only as the placeholder shown for the moment before the bundle runs; the title that sticks comes from <code>appTitle</code>. Rebranding the app is therefore a change to these two fields alone — <code>e2e/sign-in.spec.ts</code> asserts against them rather than against literal strings, so it follows a rename instead of failing on one.</p></blockquote>
       </section>
 
       <section>
@@ -221,13 +224,13 @@
         <div class="table-wrap"><table>
           <thead><tr><th>Spec</th><th>What it covers</th></tr></thead>
           <tbody>
-            <tr><td><code>e2e/sign-in.spec.ts</code></td><td>Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render.</td></tr>
+            <tr><td><code>e2e/sign-in.spec.ts</code></td><td>Pre-auth screen: app shell loads (tab title and sign-in heading asserted against <code>config.appTitle</code>, so a rebrand does not break the test), Google/Microsoft sign-in buttons render.</td></tr>
             <tr><td><code>e2e/projects.spec.ts</code></td><td>After sign-in: the "Your Projects" view and Add Project action render, and a fresh user starts with no projects (empty state) — relying on per-test user isolation.</td></tr>
             <tr><td><code>e2e/project-crud.spec.ts</code></td><td>Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test runs as its own user (per-test isolation) so tests stay independent.</td></tr>
             <tr><td><code>e2e/editor.spec.ts</code></td><td>BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on <code>window.__E2E_BPMN__</code>), save it, and confirm the task persisted by reloading and re-reading the saved XML.</td></tr>
             <tr><td><code>e2e/core-flows.spec.ts</code></td><td>Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup <code>State before loading '&lt;name&gt;'</code> milestone is created).</td></tr>
             <tr><td><code>e2e/validation.spec.ts</code></td><td>Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered.</td></tr>
-            <tr><td><code>e2e/model-ops.spec.ts</code></td><td>Model operations &amp; persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via <code>.. / &lt;folder&gt;</code>), download a <code>.bpmn</code> file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the <code>autoSave</code> localStorage key).</td></tr>
+            <tr><td><code>e2e/model-ops.spec.ts</code></td><td>Model operations &amp; persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via <code>.. / &lt;folder&gt;</code>), download a <code>.bpmn</code> file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the <code>autoSave</code> localStorage key). Also covers unsaved changes: switching models from the side panel offers save-or-discard (asserting the stored XML for each branch), and an unsaved edit does not come back after reopening the model — the edit is first confirmed to have reached the shared collaboration log, so the test cannot pass for the wrong reason.</td></tr>
             <tr><td><code>e2e/security-rules.spec.ts</code></td><td>What the security rules deny. An outsider account attempts node reads, collection listings, cross-tenant queries and writes against another user's project — including adding themselves to it and forging an invitation — and every attempt must fail; the owner's own access is unaffected. A second test walks the whole invitation path: no access → invited (the project's <em>name</em> becomes readable, nothing else) → accepted → access. Every attempt runs through <code>window.__E2E_DB__</code>, so these are real client operations against the real rules.</td></tr>
             <tr><td><code>e2e/collaboration.spec.ts</code></td><td>Two-client real-time collaboration (opt-in, <code>collab</code> project). Two users open the same model; one builds a large diagram while the other converges live; asserts presence, shared-document propagation, and convergence. Also covers the idle tiers: a window left untouched is flagged away, has its cursor cleared, gives up the persistence leadership, and downloads none of the peer's edits until a single mouse move brings it back and it catches up. Meters the Realtime Database WebSocket on each client (received bytes = billable egress), breaks it down by phase, and writes a data-rate report with a cost projection to <code>e2e/.collab-report/</code>.</td></tr>
             <tr><td><code>e2e/demo-vergunningsaanvraag.spec.ts</code></td><td>Four-user live-collaboration demo choreography (opt-in, <code>demo</code> project), meant for screen-recording rather than as a pass/fail gate. Four users (Dutch names) in four tiled, headed windows collaboratively build a Dutch <em>vergunningsaanvraag</em> (permit-application) BPMN process; actions are human-paced, mice drift over the canvas to drive live remote cursors, and two users deliberately draw at the same time to show concurrent editing merges. Ends with a light convergence check that all four windows hold the identical diagram.</td></tr>
@@ -246,7 +249,8 @@
         <h2>How it fits together</h2>
         <pre class="mermaid">
 flowchart TD
-    A["src/config/config.js\nbpmnModelerVersion\nenableGoogleSignIn\nenableMicrosoftSignIn"] --> B["App.tsx / header\nconditional sign-in buttons"]
+    A["src/config/config.js\nappTitle, logoUrl\nbpmnModelerVersion\nenableGoogleSignIn\nenableMicrosoftSignIn"] --> B["App.tsx\nheader + sign-in screen,\nconditional sign-in buttons"]
+    A --> A2["main.tsx\ndocument.title = appTitle"]
 
     C["src/config/.example.firebase.js\n(template, committed)"]
     D["src/config/.firebase.js\n(gitignored, fill from example)"]

@@ -2,6 +2,18 @@
 
 A dated history of documentation changes, newest first.
 
+## 2026-09-18
+
+### config.md
+- **New fields:** `config.appTitle` (`string`) — the application name, driving the browser tab title (set in `src/main.tsx`), the sign-in heading and both logo `alt` texts; and `config.logoUrl` (`string`) — the header and sign-in logo. Noted that `index.html`'s `<title>` is only a pre-bundle placeholder.
+- **Corrected:** `bpmnModelerVersion` default is `"0.6.0"` (was documented as `"0.5.1"`), and it is rendered in the UI **footer**, not the header.
+- **Updated test coverage:** `e2e/sign-in.spec.ts` asserts the title and heading against `config.appTitle`; `e2e/model-ops.spec.ts` also covers the side-panel save-or-discard prompt and that an unsaved edit does not come back after reopening a model.
+
+### functions.md
+- **New entry point (§6):** `migrate-export-file.js` applies the security-rules backfill to an exported JSON file, alongside the existing live-database script. Both now share one pure transform in `functions/scripts/lib/security-backfill.js` (`planBackfill` / `applyUpdates`).
+- **New npm script:** `migrate-export-file`.
+- **New flag:** `--keep-sessions` (file entry point only); documented that the file path drops the ephemeral `sessions/` subtree by default, and that importing a JSON export *replaces* rather than merges.
+
 ## 2026-09-17 (security rules)
 
 ### config.md

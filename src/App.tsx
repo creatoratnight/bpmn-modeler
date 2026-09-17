@@ -769,7 +769,7 @@ function App() {
           </Modal>
           <Tile className="header">
               <div className="header-logo">
-                  <img src="/valtimo-designer-logo.png" alt="valtimo academy logo"/>
+                  <img src={config.logoUrl} alt={`${config.appTitle} logo`}/>
               </div>
               <div className="header-nav">
                   {user && <div className="nav-projects-folder" onClick={onMyProjectsNavClick}>
@@ -1048,9 +1048,9 @@ function App() {
                       </div>
                   )}
                   {!user && <div className="welcome-wrapper">
-                      <img src="/valtimo-designer-logo.png" alt="BPMN Modeler logo" className='welcome-logo'/>
+                      <img src={config.logoUrl} alt={`${config.appTitle} logo`} className='welcome-logo'/>
                       <div className="welcome-title">
-                          Welcome to BPMN Modeler!
+                          Welcome to {config.appTitle}!
                       </div>
                       <div className="welcome-subtitle">
                           the open-source BPMN & DMN modeling collaboration tool

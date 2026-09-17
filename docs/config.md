@@ -8,19 +8,23 @@ The `src/config/` directory holds the runtime configuration files consumed by th
 
 ## 1. Application config
 
-A single exported object in `src/config/config.js` that controls feature flags and the application version string. It is a plain JS object with no external dependencies.
+A single exported object in `src/config/config.js` that controls branding, feature flags and the application version string. It is a plain JS object with no external dependencies, committed to the repo — unlike `.firebase.js`, it holds no credentials.
 
 **Source:** `src/config/config.js`
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `bpmnModelerVersion` | `string` | `"0.5.1"` | Human-readable application version, displayed in the UI header. |
+| `appTitle` | `string` | `"Valtimo Designer"` | The application's name. Sets the browser tab title (assigned in `src/main.tsx` at startup), the sign-in heading (`Welcome to {appTitle}!`), and the `alt` text of both logo images. |
+| `logoUrl` | `string` | `"/valtimo-designer-logo.png"` | The logo shown in the header and on the sign-in screen. A path under `public/` or an absolute URL. |
+| `bpmnModelerVersion` | `string` | `"0.6.0"` | Human-readable application version, displayed in the UI footer. |
 | `enableGoogleSignIn` | `boolean` | `true` | When `true`, the "Sign in with Google" button is rendered in the sign-in view. |
 | `enableMicrosoftSignIn` | `boolean` | `true` | When `true`, the "Sign in with Microsoft" button is rendered in the sign-in view. |
 
 **Validation:**
-- All three fields have no runtime validation — they are read directly wherever needed.
+- No field has runtime validation — each is read directly wherever it is needed.
 - Setting both `enableGoogleSignIn` and `enableMicrosoftSignIn` to `false` results in no sign-in options being shown.
+
+> `index.html` also carries a `<title>`, but only as the placeholder shown for the moment before the bundle runs; the title that sticks comes from `appTitle`. Rebranding the app is therefore a change to these two fields alone — `e2e/sign-in.spec.ts` asserts against them rather than against literal strings, so it follows a rename instead of failing on one.
 
 ---
 
@@ -203,13 +207,13 @@ Access is resolved through project membership: `bpmnModels/{modelId}/projectId` 
 
 | Spec | What it covers |
 |------|----------------|
-| `e2e/sign-in.spec.ts` | Pre-auth screen: app shell loads, Google/Microsoft sign-in buttons render. |
+| `e2e/sign-in.spec.ts` | Pre-auth screen: app shell loads (tab title and sign-in heading asserted against `config.appTitle`, so a rebrand does not break the test), Google/Microsoft sign-in buttons render. |
 | `e2e/projects.spec.ts` | After sign-in: the "Your Projects" view and Add Project action render, and a fresh user starts with no projects (empty state) — relying on per-test user isolation. |
 | `e2e/project-crud.spec.ts` | Authenticated CRUD: create a project, open it, rename it (verified via the list), add a folder, add a BPMN model. Each test runs as its own user (per-test isolation, see below) so tests stay independent. |
 | `e2e/editor.spec.ts` | BPMN editor: open a model, draw a task off the start event via the modeling API (exposed on `window.__E2E_BPMN__`), save it, and confirm the task persisted by reloading and re-reading the saved XML. |
 | `e2e/core-flows.spec.ts` | Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup `State before loading '<name>'` milestone is created). |
 | `e2e/validation.spec.ts` | Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered. |
-| `e2e/model-ops.spec.ts` | Model operations & persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via `.. / <folder>`), download a `.bpmn` file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the `autoSave` localStorage key). |
+| `e2e/model-ops.spec.ts` | Model operations & persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via `.. / <folder>`), download a `.bpmn` file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the `autoSave` localStorage key). Also covers unsaved changes: switching models from the side panel offers save-or-discard (asserting the stored XML for each branch), and an unsaved edit does not come back after reopening the model — the edit is first confirmed to have reached the shared collaboration log, so the test cannot pass for the wrong reason. |
 | `e2e/security-rules.spec.ts` | What the security rules deny. An outsider account attempts node reads, collection listings, cross-tenant queries and writes against another user's project — including adding themselves to it and forging an invitation — and every attempt must fail; the owner's own access is unaffected. A second test walks the whole invitation path: no access → invited (the project's *name* becomes readable, nothing else) → accepted → access. Every attempt runs through `window.__E2E_DB__`, so these are real client operations against the real rules. |
 | `e2e/collaboration.spec.ts` | Two-client real-time collaboration (opt-in, `collab` project). Two users open the same model; one builds a large diagram while the other converges live; asserts presence, shared-document propagation, and convergence. Also covers the idle tiers: a window left untouched is flagged away, has its cursor cleared, gives up the persistence leadership, and downloads none of the peer's edits until a single mouse move brings it back and it catches up. Meters the Realtime Database WebSocket on each client (received bytes = billable egress), breaks it down by phase, and writes a data-rate report with a cost projection to `e2e/.collab-report/`. |
 | `e2e/demo-vergunningsaanvraag.spec.ts` | Four-user live-collaboration demo choreography (opt-in, `demo` project), meant for screen-recording rather than as a pass/fail gate. Four users (Dutch names) in four tiled, headed windows collaboratively build a Dutch *vergunningsaanvraag* (permit-application) BPMN process; actions are human-paced, mice drift over the canvas to drive live remote cursors, and two users deliberately draw at the same time to show concurrent editing merges. Ends with a light convergence check that all four windows hold the identical diagram. |
@@ -227,7 +231,8 @@ Access is resolved through project membership: `bpmnModels/{modelId}/projectId` 
 
 ```mermaid
 flowchart TD
-    A["src/config/config.js\nbpmnModelerVersion\nenableGoogleSignIn\nenableMicrosoftSignIn"] --> B["App.tsx / header\nconditional sign-in buttons"]
+    A["src/config/config.js\nappTitle, logoUrl\nbpmnModelerVersion\nenableGoogleSignIn\nenableMicrosoftSignIn"] --> B["App.tsx\nheader + sign-in screen,\nconditional sign-in buttons"]
+    A --> A2["main.tsx\ndocument.title = appTitle"]
 
     C["src/config/.example.firebase.js\n(template, committed)"]
     D["src/config/.firebase.js\n(gitignored, fill from example)"]

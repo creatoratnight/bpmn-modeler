@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import config from '../src/config/config';
 
 /**
  * Smoke tests for the pre-authentication screen.
@@ -11,7 +12,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Sign-in screen', () => {
   test('loads the app shell', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/Valtimo Designer/);
+    // Both the tab title and the sign-in heading come from `appTitle`, so
+    // rebranding the app is a one-line config change and not a test failure.
+    await expect(page).toHaveTitle(config.appTitle);
+    await expect(page.getByText(`Welcome to ${config.appTitle}!`)).toBeVisible();
   });
 
   test('shows the Google and Microsoft sign-in options', async ({ page }) => {

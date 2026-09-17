@@ -672,13 +672,27 @@ test('concurrent edits to different elements all survive (CRDT merge)', async ()
     }
 });
 
-test('a parked window stops costing the session, and catches up on return', async () => {
+/**
+ * Drive the tab's visibility. Headless Chromium reports every page as visible
+ * whatever is in front, so the browser's own signal cannot be produced here; the
+ * value is overridden and the real `visibilitychange` event dispatched, which is
+ * exactly what the app listens to.
+ */
+async function setTabHidden(page: Page, hidden: boolean): Promise<void> {
+    await page.evaluate((h) => {
+        Object.defineProperty(document, 'visibilityState', { value: h ? 'hidden' : 'visible', configurable: true });
+        Object.defineProperty(document, 'hidden', { value: h, configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+}
+
+test('a hidden window stops costing the session, and catches up on return', async () => {
     test.setTimeout(180_000);
 
     // Only B parks. Its tiers are shortened to seconds; A keeps the production
     // thresholds, and its own edits count as activity, so A never steps away.
     const IDLE_AFTER_MS = 1_500;
-    const AWAY_AFTER_MS = 3_000;
+    const HIDDEN_AWAY_MS = 2_000;
 
     const meters: Meter[] = [];
     const { pageA, pageB, modelId, cleanup } = await openTwoClients({
@@ -686,7 +700,7 @@ test('a parked window stops costing the session, and catches up on return', asyn
             meters.push(attachMeter(b));
             await b.addInitScript((ms) => {
                 (window as any).__E2E_IDLE_MS__ = ms;
-            }, { idleAfterMs: IDLE_AFTER_MS, awayAfterMs: AWAY_AFTER_MS, hiddenAwayMs: AWAY_AFTER_MS });
+            }, { idleAfterMs: IDLE_AFTER_MS, hiddenAwayMs: HIDDEN_AWAY_MS });
         },
     });
     const meter = meters[0];
@@ -711,7 +725,16 @@ test('a parked window stops costing the session, and catches up on return', asyn
         await expect.poll(() => taskNames(pageB), { timeout: 25_000 }).toContain('Before the pause');
         const baseline = await elementCount(pageB);
 
-        // --- B is left alone --------------------------------------------------
+        // --- B's tab is backgrounded ------------------------------------------
+        // Being untouched is deliberately *not* enough: a window on screen keeps
+        // receiving edits however long it sits (see the sibling test). Only
+        // hiding it, where nobody can see it, detaches the session.
+        await pageB.waitForFunction(() => (window as any).__E2E_IDLE__?.current === 'idle', undefined,
+            { timeout: 20_000 });
+        expect(await pageB.evaluate(() => (window as any).__E2E_IDLE__.current),
+            'untouched but visible is idle, never away').toBe('idle');
+
+        await setTabHidden(pageB, true);
         await pageB.waitForFunction(() => (window as any).__E2E_IDLE__?.current === 'away', undefined,
             { timeout: 20_000 });
 
@@ -745,7 +768,8 @@ test('a parked window stops costing the session, and catches up on return', asyn
         expect(leader?.uid, 'a parked window does not hold the persistence leadership')
             .not.toBe(uidB);
 
-        // --- one mouse move brings B back -------------------------------------
+        // --- showing the tab again brings B back ------------------------------
+        await setTabHidden(pageB, false);
         await pageB.mouse.move(box.x + 240, box.y + 240);
         await pageB.waitForFunction(() => (window as any).__E2E_IDLE__?.current === 'active', undefined,
             { timeout: 10_000 });
@@ -760,6 +784,41 @@ test('a parked window stops costing the session, and catches up on return', asyn
 
         await addNamedTask(pageB, 'After the pause', 300, 480);
         await expect.poll(() => taskNames(pageA), { timeout: 25_000 }).toContain('After the pause');
+    } finally {
+        await cleanup();
+    }
+});
+
+test('a window left untouched on screen keeps receiving edits', async () => {
+    test.setTimeout(150_000);
+
+    // B is never touched after opening, and its tiers are shortened so that the
+    // whole test runs well past them. Watching a colleague work is exactly this:
+    // no input for minutes, on a window you are staring at.
+    const { pageA, pageB, cleanup } = await openTwoClients({
+        beforeLoad: async (_a, b) => {
+            await b.addInitScript((ms) => {
+                (window as any).__E2E_IDLE_MS__ = ms;
+            }, { idleAfterMs: 500, hiddenAwayMs: 1_000 });
+        },
+    });
+
+    try {
+        // Let B sit well past every threshold without a single event.
+        await pageB.waitForTimeout(6_000);
+        expect(await pageB.evaluate(() => (window as any).__E2E_IDLE__.current),
+            'an untouched but visible window is idle, never away').toBe('idle');
+        expect(await pageB.evaluate(() => document.visibilityState)).toBe('visible');
+
+        // A works. B must show it, without anyone touching B.
+        await addNamedTask(pageA, 'Watcher sees this', 360, 260);
+        await expect.poll(() => taskNames(pageB), { timeout: 25_000 }).toContain('Watcher sees this');
+
+        // Still untouched, still receiving — a second edit lands too.
+        await pageA.waitForTimeout(2_000);
+        await addNamedTask(pageA, 'And this one', 520, 260);
+        await expect.poll(() => taskNames(pageB), { timeout: 25_000 }).toContain('And this one');
+        expect(await pageB.evaluate(() => (window as any).__E2E_IDLE__.current)).toBe('idle');
     } finally {
         await cleanup();
     }

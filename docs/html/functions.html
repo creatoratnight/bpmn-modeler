@@ -111,7 +111,8 @@
             <tr><td><code>npm run emulate</code></td><td>Runs <code>sync-config</code> then builds and starts the local Firebase Emulator</td></tr>
             <tr><td><code>npm run test</code></td><td>Runs <code>sync-config</code> (to inject env vars) then Jest</td></tr>
             <tr><td><code>npm run migrate-milestones</code></td><td>Runs the milestone data migration (see section 5)</td></tr>
-            <tr><td><code>npm run migrate-security-backfill</code></td><td>Runs the security-rules backfill (see section 6)</td></tr>
+            <tr><td><code>npm run migrate-security-backfill</code></td><td>Runs the security-rules backfill against a live database (see section 6)</td></tr>
+            <tr><td><code>npm run migrate-export-file</code></td><td>Runs the same backfill against an exported JSON file (see section 6)</td></tr>
           </tbody>
         </table></div>
         <p><strong>Source:</strong> <code>functions/scripts/deploy.js</code>, <code>functions/scripts/sync-config.js</code>, <code>functions/scripts/start-emulator.js</code></p>
@@ -145,7 +146,15 @@
       <section>
         <h2>6. Security-rules backfill</h2>
         <p>A one-off migration for data that predates what the tightened security rules resolve access through. Without it, that data is unreachable — the rules cannot authorise what they cannot resolve.</p>
-        <p><strong>Source:</strong> <code>functions/scripts/migrate-security-backfill.js</code></p>
+        <p>It has <strong>two entry points over one shared transform</strong>, so they cannot drift:</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Entry point</th><th>Applies the change to</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td><code>npm run migrate-security-backfill</code></td><td>A live database, as one atomic multi-path update</td><td><code>functions/scripts/migrate-security-backfill.js</code></td></tr>
+            <tr><td><code>npm run migrate-export-file</code></td><td>An exported JSON file, offline (export → migrate → re-import)</td><td><code>functions/scripts/migrate-export-file.js</code></td></tr>
+          </tbody>
+        </table></div>
+        <p><strong>Source (shared transform):</strong> <code>functions/scripts/lib/security-backfill.js</code> — <code>planBackfill(root)</code> decides what should change and returns flat <code>path -&gt; value</code> updates (a <code>null</code> means delete), which is both what a multi-path <code>update()</code> takes and what <code>applyUpdates(root, updates)</code> applies to a tree in memory. Nothing in it touches Firebase.</p>
         <div class="table-wrap"><table>
           <thead><tr><th>Step</th><th>Change</th><th>Why</th></tr></thead>
           <tbody>
@@ -163,11 +172,14 @@
           <li>The email escaping mirrors <code>src/services/invites.service.tsx</code> and the <code>.replace()</code> chains in <code>database.rules.json</code>; all three must change together.</li>
         </ul>
         <div class="table-wrap"><table>
-          <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+          <thead><tr><th>Flag</th><th>Effect</th><th>Entry point</th></tr></thead>
           <tbody>
-            <tr><td><code>--dry-run</code></td><td>Report the paths that would be written/deleted without writing anything.</td></tr>
+            <tr><td><code>--dry-run</code></td><td>Report the paths that would be written/deleted without writing anything.</td><td>both</td></tr>
+            <tr><td><code>--keep-sessions</code></td><td>Keep the ephemeral <code>sessions/</code> subtree instead of dropping it.</td><td>file only</td></tr>
           </tbody>
         </table></div>
+        <p><strong>The file entry point</strong> takes <code>&lt;export.json&gt; [migrated.json]</code>, never modifies its input (keep it as the rollback), and additionally drops the ephemeral <code>sessions/</code> subtree — live collaboration state that is recreated as people open models.</p>
+        <blockquote><p>⚠ Importing a JSON export <strong>replaces</strong> the node it is imported into; it is a set, not a merge. Anything written between the export and the import is lost, so export, migrate and import back-to-back with nobody editing. The live entry point has no such window, since it merges.</p></blockquote>
       </section>
 
       <section>
@@ -216,6 +228,8 @@ flowchart TD
           <li><code>functions/scripts/start-emulator.js</code></li>
           <li><code>functions/scripts/migrate-milestones.js</code></li>
           <li><code>functions/scripts/migrate-security-backfill.js</code></li>
+          <li><code>functions/scripts/migrate-export-file.js</code></li>
+          <li><code>functions/scripts/lib/security-backfill.js</code></li>
           <li><code>functions/jest.setup.js</code></li>
         </ul>
       </section>

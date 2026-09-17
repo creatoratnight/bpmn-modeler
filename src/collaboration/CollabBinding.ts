@@ -78,12 +78,15 @@ interface Modeler {
  *
  * Presence traffic is the most expensive channel in the session, so it follows
  * the window's activity state ({@link IdleDetector}):
- *   - `idle` — we stop publishing our own cursor and selection, and take our
- *     cursor off everyone else's canvas.
- *   - `away` — we additionally unsubscribe from peer cursors and selections, so
- *     a parked window stops downloading ~15 cursor updates a second from every
- *     peer who *is* working. Peer presence stays subscribed (it is small and
- *     low-churn) and the streams re-attach on the first sign of activity.
+ *   - `idle` — nobody is typing here, so we stop publishing our own cursor and
+ *     selection and take our cursor off everyone else's canvas. We keep
+ *     *receiving* everything: the window is still on screen, and someone may well
+ *     be watching a colleague work.
+ *   - `away` — the tab is hidden, so nothing here is being looked at. We also
+ *     unsubscribe from peer cursors and selections, and a backgrounded window
+ *     stops downloading ~15 cursor updates a second from every peer who *is*
+ *     working. Peer presence stays subscribed (it is small and low-churn) and the
+ *     streams re-attach when the tab is shown again.
  */
 export class CollabBinding {
     private readonly canvas: DiagramCanvas;

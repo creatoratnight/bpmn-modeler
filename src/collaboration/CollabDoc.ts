@@ -51,12 +51,14 @@ export interface CollabModeler extends BindingModeler {
  *     log. Existing editors detach from the state after they are ready, so this
  *     republished state is downloaded only by new joiners, keeping per-edit egress
  *     small and independent of model size.
- *   - **Suspend / resume.** A window whose user has walked away
+ *   - **Suspend / resume.** A window that has been *hidden* for a while
  *     ({@link IdleDetector}'s `away`) unsubscribes from the shared log and steps
  *     down as leader, so it neither downloads other people's edits nor keeps
- *     writing the document on their behalf. On the first sign of activity it
- *     folds in the current published state — the log may have been compacted and
- *     pruned meanwhile — and follows the log again.
+ *     writing the document on their behalf. When it is shown again it folds in
+ *     the current published state — the log may have been compacted and pruned
+ *     meanwhile — and follows the log again. Note that only *hiding* does this:
+ *     a window on screen keeps receiving edits however long it sits untouched,
+ *     because someone may be watching it.
  */
 export class CollabDoc {
     private readonly doc = new Y.Doc();
