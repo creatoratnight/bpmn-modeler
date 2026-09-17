@@ -30,9 +30,9 @@ Full-featured BPMN diagram editor, wrapping the `bpmn-js` library. Exported as a
 | `handleResize` | `() => void` | Triggers a canvas resize; called by the parent when the side panel opens/closes. |
 | `importXML` | `(newXml: string) => Promise<void>` | Programmatically loads new XML into the editor. Used when loading a milestone. |
 
-> **E2E test hook:** in end-to-end test mode (`VITE_FIREBASE_EMULATOR=true`), the underlying `bpmn-js` modeler instance is exposed on `window.__E2E_BPMN__` once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see `e2e/editor.spec.ts`). The block is guarded so it is stripped from production builds.
+> **E2E test hooks:** in end-to-end test mode (`VITE_FIREBASE_EMULATOR=true`), the underlying `bpmn-js` modeler instance is exposed on `window.__E2E_BPMN__` once the initial XML import resolves, and removed on unmount. This lets the Playwright editor test drive the modeling API directly (see `e2e/editor.spec.ts`). The activity detector is exposed the same way on `window.__E2E_IDLE__`, and reads its thresholds from `window.__E2E_IDLE_MS__` when set, so a test can exercise the idle tiers in seconds instead of minutes. Both blocks are guarded so they are stripped from production builds.
 
-> **Collaboration binding:** when a `collabSession` is provided, a separate effect (keyed on modeler-ready + session) attaches two helpers to the modeler instance: `CollabBinding` (publishes this user's cursor/selection and renders peers' cursor and selection overlays) and `CollabDoc` (CRDT live sync between peers via a shared Yjs document, which *merges* concurrent edits per element and field rather than overwriting, plus leader-elected persistence back to `modelXmlData`). Both are torn down when the session clears or the component unmounts. See the presence UI in [§7](#7-collaboration-presence).
+> **Collaboration binding:** when a `collabSession` is provided, a separate effect (keyed on modeler-ready + session) attaches three helpers to the modeler instance: `CollabBinding` (publishes this user's cursor/selection and renders peers' cursor and selection overlays), `CollabDoc` (CRDT live sync between peers via a shared Yjs document, which *merges* concurrent edits per element and field rather than overwriting, plus leader-elected persistence back to `modelXmlData`), and a single `IdleDetector` shared by both — so the presence overlay and the shared document step away from, and return to, the session together when the user stops working. All three are torn down when the session clears or the component unmounts. See the presence UI in [§7](#7-collaboration-presence).
 
 ---
 
@@ -229,6 +229,7 @@ Presentational avatar stack shown in the BPMN modeler toolbar, indicating who el
 **Behaviour (derived from code):**
 - Renders `null` when `peers` is empty — nothing is shown when you are editing alone.
 - Each avatar is a 28 px circle ringed in that peer's collaboration color; it shows the peer's avatar image when available, otherwise their initials (first + last name letters, or the first two characters of a single-word name).
+- A peer flagged `idle` (they have stepped away from their window) is rendered dimmed and greyscaled, and their `title` reads `<name> (away)` — so the bar shows who is actually working, not just who has the model open.
 - When more than `max` peers are present, a `+N` chip is appended whose `title` lists the overflow names.
 
 ---
@@ -294,4 +295,4 @@ flowchart TD
 ### Collaboration presence
 - `src/collaboration/PresenceBar.tsx`
 
-> The real-time collaboration **engine** that these UI pieces consume — `useCollaboration`, `CollaborationSession`, `CollabDoc`, the Yjs binding (`BpmnYjsBinding` + `YModel`), `CollabBinding`, and the shared `identity`/`types` modules under `src/collaboration/` — is not documented here; it warrants its own document (`/generate-docs collaboration`).
+> The real-time collaboration **engine** that these UI pieces consume — `useCollaboration`, `CollaborationSession`, `CollabDoc`, the Yjs binding (`BpmnYjsBinding` + `YModel`), `CollabBinding`, `IdleDetector`, and the shared `identity`/`types` modules under `src/collaboration/` — is not documented here; it warrants its own document (`/generate-docs collaboration`).

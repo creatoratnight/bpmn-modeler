@@ -6,7 +6,7 @@
 // handle plus the modular helpers, so tests can seed data — e.g. cross-user
 // project membership for a collaboration test — through the exact same database
 // connection, namespace, and security rules the app itself uses.
-import { getDatabase, ref, get, set, update, remove } from 'firebase/database';
+import { getDatabase, ref, get, set, update, remove, query, orderByChild, equalTo } from 'firebase/database';
 
 if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
     (window as unknown as Record<string, unknown>).__E2E_DB__ = {
@@ -16,5 +16,10 @@ if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') {
         set,
         update,
         remove,
+        // Query helpers: the security rules authorise collection reads by query
+        // *shape*, so the rules test has to be able to issue the real queries.
+        query,
+        orderByChild,
+        equalTo,
     };
 }

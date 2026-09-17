@@ -76,7 +76,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 
 | Action | Detail |
 |--------|--------|
-| `window.__E2E_DB__ = { getDatabase, ref, get, set, update, remove }` | The app's own (emulator-connected) Realtime Database handle plus the modular helpers. Tests use it to seed data — e.g. cross-user project membership in the collaboration test — through the exact database connection, namespace, and security rules the app itself uses. |
+| `window.__E2E_DB__ = { getDatabase, ref, get, set, update, remove, query, orderByChild, equalTo }` | The app's own (emulator-connected) Realtime Database handle plus the modular helpers. Tests use it to seed data — e.g. cross-user project membership in the collaboration test — through the exact database connection, namespace, and security rules the app itself uses. The query helpers are there because the rules authorise collection reads by query *shape*, so the security-rules test has to issue the real queries. |
 
 **Source:** `src/config/e2e-hooks.ts`
 
@@ -130,12 +130,23 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 
 **Source:** `database.rules.json`
 
+Rules **cascade downward as grants**: a rule deeper in the tree can only widen access, never narrow it, and once a node grants `.read` or `.write` every rule below it is ignored. Every restriction below therefore depends on nothing above it granting first, which is why no collection is readable as a whole.
+
+Access is resolved through project membership: `bpmnModels/{modelId}/projectId` → `projects/{projectId}/members/{uid}`, and for data one step further out (model XML, milestone snapshots) through the model node.
+
 | Node | Access | Description |
 |------|--------|-------------|
-| `users/{uid}` | Any authed user may read; a user may write only their own node (`email` is read-only). | User profile + reverse project index. |
-| `projects`, `bpmnModels`, `modelXmlData`, `invitations`, `milestoneData` | Authed users. | Project/model metadata, model XML, invitations, milestone snapshots. |
-| `milestones/{modelId}`, `comments/{modelId}` | Members of the model's project only (resolved via `bpmnModels/{modelId}/projectId` → `projects/{projectId}/members/{uid}`). | Milestone metadata and comments. |
-| `sessions/{modelId}` | Members of the model's project only. | Ephemeral real-time collaboration state — `presence`, `cursors`, `selections`, `viewports`, `ops`, `leader`, and the shared live `doc`. Per-user child nodes are writable only by that user (`auth.uid === $uid`); `doc`/`leader` writes must be self-attributed. |
+| `users/{uid}` | Readable per-uid by any authed user; writable only by that user. | User profile + reverse project index. Per-uid reads back the members panel and the "who invited you" line. The collection itself is not listable — the only collection-level read is an equality query on `email` (the invite lookup). |
+| `users/{uid}/projects/{projectId}` | Addition to the above: the project's owner may also clear this entry. | Lets an owner remove a member without leaving them pointing at a project they no longer belong to. |
+| `projects/{projectId}` | Owner or member; creation requires `ownerId` to be the caller. | The collection is not listable; clients read projects by id from their own `users/{uid}/projects` index. |
+| `projects/{projectId}/name` | Addition: also readable by someone holding a *pending* invitation to that project. | So an invite can say which project it is for, without opening the project. |
+| `projects/{projectId}/members/{uid}` | Addition: a user may add **themselves** when a pending invitation exists at `invitations/{projectId}_{encoded email}`. | The one way to gain access to someone else's project. The key is derived from the project and `auth.token.email`, because rules cannot search. |
+| `bpmnModels/{modelId}` | Member of the model's project. | Collection reads are query-scoped: only `orderByChild('projectId')` on a project you belong to (used when deleting a project). |
+| `modelXmlData/{modelId}` | Member of the model's project. | A model and its XML are created in one multi-path update and `root` is the pre-write state, so creation is additionally allowed where no model node exists yet — that can only create an orphan under an unused push id. |
+| `milestoneData/{milestoneId}` | Member of the project owning `modelId`. | Requires the `modelId` back-reference; without it a snapshot cannot be tied to a project at all. |
+| `invitations/{invitationId}` | The invited address, or a member of the project. | Two query shapes only: `invitedEmail` equal to your own verified address, and `projectId` of a project you belong to. The key must match the `projectId` + `invitedEmail` the record claims. |
+| `milestones/{modelId}`, `comments/{modelId}` | Members of the model's project only. | Milestone metadata and comments. |
+| `sessions/{modelId}` | Members of the model's project only. | Ephemeral real-time collaboration state — `presence` (name, color, avatar, `joinedAt`/`lastActive`, and an `idle` flag set while that user has stepped away), `cursors`, `selections`, `viewports`, `leader`, and the shared Yjs document under `ydoc` (an append-only update `log` plus the leader-compacted `state`). Per-user child nodes are writable only by that user (`auth.uid === $uid`); a `leader` claim must be self-attributed. |
 
 ---
 
@@ -167,7 +178,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `reporter` | `'html'` | Generates an HTML report (opened via `npm run test:e2e:report`). |
 | `use.baseURL` | `'http://localhost:5174'` | Base URL tests navigate against — a dedicated e2e port so the test server is never confused with a normal `npm run dev` on 5173. |
 | `use.trace` | `'on-first-retry'` | Captures a Playwright trace when a test is retried. |
-| `projects` | `[chromium, screenshots, collab]` | `chromium` runs the `*.spec.ts` tests (Desktop Chrome; Firefox/WebKit commented out) but **excludes** `collaboration.spec.ts` via `testIgnore`. `screenshots` runs only `*.shots.ts` at a 1440×900 viewport for documentation captures. `collab` runs only `collaboration.spec.ts` — the heavy, multi-window two-client collaboration test — opt-in via `npm run test:collab`. Both extra projects are excluded from the normal test run. |
+| `projects` | `[chromium, screenshots, collab, demo]` | `chromium` runs the `*.spec.ts` tests (Desktop Chrome; Firefox/WebKit commented out) but **excludes** both `collaboration.spec.ts` and `demo-vergunningsaanvraag.spec.ts` via `testIgnore`. `screenshots` runs only `*.shots.ts` at a 1440×900 viewport for documentation captures. `collab` runs only `collaboration.spec.ts` — the heavy, multi-window two-client collaboration test — opt-in via `npm run test:collab`. `demo` runs only `demo-vergunningsaanvraag.spec.ts` — the four-window live-collaboration demo choreography — opt-in via `npm run demo`. The three extra projects are all excluded from the normal test run. |
 | `webServer.command` | `'npm run dev:e2e'` | Command started before the suite (`vite --mode e2e`, loads `.env.e2e`). |
 | `webServer.url` | `'http://localhost:5174'` | URL polled until the dev server is ready. |
 | `webServer.reuseExistingServer` | `!process.env.CI` | Reuses an already-running dev server locally; always starts fresh on CI. |
@@ -183,6 +194,7 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `test:e2e:ui` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=chromium --ui"` | Interactive Playwright UI mode; boots the emulators automatically (no separate `npm run emulators` needed). |
 | `test:e2e:report` | `playwright show-report` | Opens the last HTML report. |
 | `test:collab` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=collab"` | Boots the emulators and runs only the two-client real-time collaboration + data-rate test. Launches two side-by-side headed browser windows by default (set `HEADLESS=1` to hide them) and writes a report to `e2e/.collab-report/index.html`. |
+| `demo` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=demo"` | Boots the emulators and runs the four-user live-collaboration demo choreography, meant for screen-recording. Launches four tiled, headed browser windows by default (set `HEADLESS=1` to hide them). Tuning env vars: `SPEED` (playback speed multiplier), `SCREEN_W`/`SCREEN_H` (screen resolution used to tile the windows), `HOLD_MS` (how long to hold on the finished diagram). |
 | `screenshots` | `firebase emulators:exec --only auth,database --project demo-bpmn "playwright test --project=screenshots"` | Captures documentation screenshots (the `screenshots` project) into `docs/assets/screenshots/`. Managed by the `capture-screenshots` skill. |
 
 **Authentication for tests:** the `demo-bpmn` project ID runs the emulators fully offline (no real credentials). The Playwright fixture `e2e/fixtures.ts` signs in via the `window.__E2E_AUTH__` hook (see §2), creating a **unique throwaway user per test** (derived from the test ID). Because projects are scoped per user (`users/{uid}/projects`), each test runs against an empty, isolated dataset while keeping full parallelism; the emulator database is reset each run. The pre-auth smoke tests (`e2e/sign-in.spec.ts`) need no sign-in.
@@ -198,7 +210,9 @@ The block adds these imports from `firebase/auth` (`connectAuthEmulator`, `signI
 | `e2e/core-flows.spec.ts` | Core authenticated journeys: delete a project (→ empty list), add and delete a comment, save and delete a milestone, and load a milestone (verifying the auto-backup `State before loading '<name>'` milestone is created). |
 | `e2e/validation.spec.ts` | Validation guards: invalid model name blocked (QName rule), "Delete Folder" disabled while the folder is non-empty (enabled when empty), and "Invite member" disabled until a valid email is entered. |
 | `e2e/model-ops.spec.ts` | Model operations & persistence: rename, duplicate, move-to-folder, create DMN, folder navigation (in/out via `.. / <folder>`), download a `.bpmn` file, deep-link reload restores the editor, and auto-save persists a change without clicking Save (and sets the `autoSave` localStorage key). |
-| `e2e/collaboration.spec.ts` | Two-client real-time collaboration (opt-in, `collab` project). Two users open the same model; one builds a large diagram while the other converges live; asserts presence, shared-document propagation, and convergence. Meters the Realtime Database WebSocket on each client (received bytes = billable egress), breaks it down by phase, and writes a data-rate report with a cost projection to `e2e/.collab-report/`. |
+| `e2e/security-rules.spec.ts` | What the security rules deny. An outsider account attempts node reads, collection listings, cross-tenant queries and writes against another user's project — including adding themselves to it and forging an invitation — and every attempt must fail; the owner's own access is unaffected. A second test walks the whole invitation path: no access → invited (the project's *name* becomes readable, nothing else) → accepted → access. Every attempt runs through `window.__E2E_DB__`, so these are real client operations against the real rules. |
+| `e2e/collaboration.spec.ts` | Two-client real-time collaboration (opt-in, `collab` project). Two users open the same model; one builds a large diagram while the other converges live; asserts presence, shared-document propagation, and convergence. Also covers the idle tiers: a window left untouched is flagged away, has its cursor cleared, gives up the persistence leadership, and downloads none of the peer's edits until a single mouse move brings it back and it catches up. Meters the Realtime Database WebSocket on each client (received bytes = billable egress), breaks it down by phase, and writes a data-rate report with a cost projection to `e2e/.collab-report/`. |
+| `e2e/demo-vergunningsaanvraag.spec.ts` | Four-user live-collaboration demo choreography (opt-in, `demo` project), meant for screen-recording rather than as a pass/fail gate. Four users (Dutch names) in four tiled, headed windows collaboratively build a Dutch *vergunningsaanvraag* (permit-application) BPMN process; actions are human-paced, mice drift over the canvas to drive live remote cursors, and two users deliberately draw at the same time to show concurrent editing merges. Ends with a light convergence check that all four windows hold the identical diagram. |
 
 **Documentation screenshots:** the `screenshots` Playwright project (run via `npm run screenshots`) captures UI images into `docs/assets/screenshots/`. Shots are defined in `e2e/screenshots/manifest.ts` and captured serially by `e2e/screenshots/capture.shots.ts` (toasts hidden, fixed names for deterministic images). This is driven by the `capture-screenshots` skill; the images are committed and embedded in the Markdown docs and their HTML twins.
 
@@ -261,6 +275,8 @@ flowchart TD
 - `e2e/fixtures.ts`
 - `e2e/sign-in.spec.ts`
 - `e2e/collaboration.spec.ts`
+- `e2e/security-rules.spec.ts`
+- `e2e/demo-vergunningsaanvraag.spec.ts`
 - `e2e/projects.spec.ts`
 - `e2e/project-crud.spec.ts`
 - `e2e/editor.spec.ts`

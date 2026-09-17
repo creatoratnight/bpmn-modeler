@@ -1,76 +1,150 @@
+// Realtime Database security rules.
+//
+// Rules CASCADE DOWNWARD AS GRANTS: a rule deeper in the tree can only widen
+// access, never narrow it. Once a node grants .read or .write, every rule below
+// it is ignored. A restriction is therefore only real if nothing above it grants
+// first — which is why no collection here is readable as a whole, and why the
+// deeper rules under `projects/$projectId/members` and `users/$userId/projects`
+// are written as *additions* covering the one case their parent denies.
+//
+// Collection-level reads are query-scoped: they authorise one specific query
+// shape rather than the collection itself, so a client can list the models of a
+// project it belongs to without being able to list the collection.
 {
   "rules": {
     ".read": false,
     ".write": false,
+
     "users": {
       ".indexOn": "email",
-      ".read": "auth != null",
-      ".write": "auth != null",
+
+      // The only collection-level read is the invite flow's lookup of a single
+      // address; it cannot be used to enumerate the user base.
+      ".read": "auth != null && query.orderByChild === 'email' && query.equalTo !== null",
+
       "$userId": {
-        ".read": "$userId === auth.uid",
-        ".write": "$userId === auth.uid",
-        "email": {
-          ".write": false
-        },
-        "displayName": {
-          ".write": "$userId === auth.uid"
-        },
-        "imageUrl": {
-          ".write": "$userId === auth.uid"
+        // Readable per-uid by any signed-in user: the members panel shows each
+        // member's name and avatar, and an invitee sees who invited them — neither
+        // of which shares a project with the reader at that moment. Uids are not
+        // enumerable, so this exposes a record only to someone who already has one.
+        ".read": "auth != null",
+        ".write": "auth != null && $userId === auth.uid",
+
+        "projects": {
+          "$projectId": {
+            // Addition to the parent rule: a project's owner may also remove their
+            // own project from a member's index when removing that member.
+            ".write": "auth != null && root.child('projects').child($projectId).child('ownerId').val() === auth.uid"
+          }
         }
       }
     },
+
     "projects": {
-      ".read": "auth != null",
-      ".write": "auth != null",
       "$projectId": {
-        ".read": "auth != null && data.child('members').child(auth.uid).exists()",
-        ".write": "auth != null && (data.child('ownerId').val() === auth.uid || data.child('members').child(auth.uid).exists())"
+        ".read": "auth != null && (data.child('ownerId').val() === auth.uid || data.child('members').child(auth.uid).exists())",
+        ".write": "auth != null && (data.child('ownerId').val() === auth.uid || data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('ownerId').val() === auth.uid))",
+
+        "name": {
+          // Addition to the parent rule: someone holding a pending invitation can
+          // read the project's name — the invite says which project it is for —
+          // without gaining access to the project node itself.
+          ".read": "auth != null && root.child('invitations').child($projectId + '_' + auth.token.email.toLowerCase().replace('%', '%25').replace('.', ',').replace('#', '%23').replace('$', '%24').replace('[', '%5B').replace(']', '%5D').replace('/', '%2F')).child('status').val() === 'Pending'"
+        },
+
+        "members": {
+          "$memberId": {
+            // Addition to the parent rule, which already covers the owner and
+            // existing members. This is the one case it denies: accepting an
+            // invitation, where you add yourself before you are a member of
+            // anything. Rules cannot search, so the pending invitation is found at
+            // a key derived from the project and the caller's own verified email —
+            // see src/services/invites.service.tsx, whose escaping this mirrors.
+            ".write": "auth != null && $memberId === auth.uid && root.child('invitations').child($projectId + '_' + auth.token.email.toLowerCase().replace('%', '%25').replace('.', ',').replace('#', '%23').replace('$', '%24').replace('[', '%5B').replace(']', '%5D').replace('/', '%2F')).child('status').val() === 'Pending'"
+          }
+        }
       }
     },
+
     "bpmnModels": {
       ".indexOn": ["projectId"],
-      ".read": "auth != null",
-      ".write": "auth != null",
+
+      // Query-scoped: list the models of a project you belong to (used when
+      // deleting a project). Not a readable collection.
+      ".read": "auth != null && query.orderByChild === 'projectId' && root.child('projects').child(query.equalTo).child('members').child(auth.uid).exists()",
+
       "$modelId": {
-        ".read": true,
-        ".write": true,
+        ".read": "auth != null && root.child('projects').child(data.child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('projects').child(newData.exists() ? newData.child('projectId').val() : data.child('projectId').val()).child('members').child(auth.uid).exists()",
         ".validate": "newData.hasChildren(['projectId', 'ownerId', 'name', 'updatedAt', 'type'])"
       }
     },
+
     "modelXmlData": {
       "$modelId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        // Membership is resolved through the model node. A model and its XML are
+        // created in one multi-path update and `root` is the pre-write state, so at
+        // creation time the model node is not visible here yet — hence the explicit
+        // create clause. That clause can only ever create an orphan node under an
+        // unused (unguessable) push id; once the model exists, membership is required.
+        ".read": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "auth != null && ((!root.child('bpmnModels').child($modelId).exists() && !data.exists()) || root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists())"
       }
     },
+
     "milestoneData": {
       "$milestoneId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        // `modelId` is the back-reference that makes membership resolvable at all —
+        // without it a snapshot cannot be tied to a project. Snapshots written
+        // before it existed are unreachable until the backfill migration has run
+        // (functions/scripts/migrate-security-backfill.js).
+        ".read": "auth != null && root.child('projects').child(root.child('bpmnModels').child(data.child('modelId').val()).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('projects').child(root.child('bpmnModels').child(newData.exists() ? newData.child('modelId').val() : data.child('modelId').val()).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".validate": "newData.hasChildren(['modelId', 'xmlData'])",
+        "modelId": { ".validate": "newData.isString()" },
+        "xmlData": { ".validate": "newData.isString()" },
+        "$other": { ".validate": false }
       }
     },
+
     "invitations": {
       ".indexOn": ["projectId", "invitedEmail"],
-      ".read": "auth != null",
-      ".write": "auth != null",
+
+      // Two query shapes and nothing else: the invitations addressed to you, and
+      // the invitations of a project you belong to. Listing the collection, or
+      // querying someone else's address, is denied.
+      ".read": "auth != null && ((query.orderByChild === 'invitedEmail' && query.equalTo === auth.token.email) || (query.orderByChild === 'projectId' && root.child('projects').child(query.equalTo).child('members').child(auth.uid).exists()))",
+
       "$invitationId": {
-        ".read": true,
-        ".write": true
+        ".read": "auth != null && (data.child('invitedEmail').val() === auth.token.email || root.child('projects').child(data.child('projectId').val()).child('members').child(auth.uid).exists())",
+        ".write": "auth != null && ((data.exists() && data.child('invitedEmail').val() === auth.token.email) || root.child('projects').child(newData.exists() ? newData.child('projectId').val() : data.child('projectId').val()).child('members').child(auth.uid).exists())",
+
+        // The key must match the project and address the invitation claims, or the
+        // membership rule above would authorise against a different invitation.
+        ".validate": "newData.hasChildren(['projectId', 'invitedEmail', 'senderId', 'status']) && $invitationId === newData.child('projectId').val() + '_' + newData.child('invitedEmail').val().toLowerCase().replace('%', '%25').replace('.', ',').replace('#', '%23').replace('$', '%24').replace('[', '%5B').replace(']', '%5D').replace('/', '%2F')",
+        "projectId": { ".validate": "newData.isString()" },
+        "invitedEmail": { ".validate": "newData.isString() && newData.val() === newData.val().toLowerCase()" },
+        "senderId": { ".validate": "newData.isString()" },
+        "status": { ".validate": "newData.isString() && newData.val().matches(/^(Pending|Accepted|Declined)$/)" },
+        "sentAt": { ".validate": "newData.isString()" },
+        "$other": { ".validate": false }
       }
     },
+
     "milestones": {
       "$modelId": {
-        ".read": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
-        ".write": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()"
+        ".read": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()"
       }
     },
+
     "comments": {
       "$modelId": {
-        ".read": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
-        ".write": "root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()"
+        ".read": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()"
       }
     },
+
     "sessions": {
       "$modelId": {
         ".read": "auth != null && root.child('projects').child(root.child('bpmnModels').child($modelId).child('projectId').val()).child('members').child(auth.uid).exists()",
@@ -84,6 +158,7 @@
             "avatarUrl": { ".validate": "newData.isString() && newData.val().length <= 512" },
             "joinedAt": { ".validate": "newData.isNumber()" },
             "lastActive": { ".validate": "newData.isNumber()" },
+            "idle": { ".validate": "newData.isBoolean()" },
             "$other": { ".validate": false }
           }
         },

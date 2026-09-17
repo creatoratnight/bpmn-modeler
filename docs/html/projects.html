@@ -124,11 +124,13 @@
         <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
           <tbody>
+            <tr><td><code>modelId</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>The model this snapshot belongs to.</td></tr>
             <tr><td><code>xmlData</code></td><td><code>string</code></td><td><span class="badge req">Yes</span></td><td>Full XML snapshot of the model at this point.</td></tr>
           </tbody>
         </table></div>
-        <p><strong>RTDB path:</strong> <code>milestoneData/{milestoneId}/xmlData</code></p>
-        <blockquote><strong>Migration:</strong> data in the legacy layout <code>milestones/{modelId}/{milestoneId}</code> (which embedded <code>xmlData</code> inline) is moved to this split layout by <code>functions/scripts/migrate-milestones.js</code>, preserving milestone IDs.</blockquote>
+        <p><strong>RTDB path:</strong> <code>milestoneData/{milestoneId}</code></p>
+        <blockquote><p><code>modelId</code> is a back-reference, not a convenience: access to a snapshot is resolved through its model to that model's project, so a snapshot without it cannot be scoped at all and has to fall back to "any signed-in user".</p></blockquote>
+        <blockquote><strong>Migration:</strong> data in the legacy layout <code>milestones/{modelId}/{milestoneId}</code> (which embedded <code>xmlData</code> inline) is moved to this split layout by <code>functions/scripts/migrate-milestones.js</code>, preserving milestone IDs. Snapshots written before <code>modelId</code> existed are backfilled by <code>functions/scripts/migrate-security-backfill.js</code>.</blockquote>
       </section>
 
       <section>
@@ -150,7 +152,7 @@
       <section>
         <h2>7. Invitation</h2>
         <p>A pending, accepted, or declined invitation to join a project.</p>
-        <p><strong>Source:</strong> <code>src/components/InviteModal.tsx</code>, <code>src/components/ProjectList.tsx</code></p>
+        <p><strong>Source:</strong> <code>src/components/InviteModal.tsx</code>, <code>src/components/ProjectList.tsx</code>, <code>src/services/invites.service.tsx</code></p>
         <div class="table-wrap"><table>
           <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
           <tbody>
@@ -161,15 +163,17 @@
             <tr><td><code>sentAt</code></td><td><code>string</code> (ISO 8601)</td><td><span class="badge req">Yes</span></td><td>When the invite was sent.</td></tr>
           </tbody>
         </table></div>
-        <p><strong>RTDB path:</strong> <code>invitations/{invitationId}</code></p>
+        <p><strong>RTDB path:</strong> <code>invitations/{projectId}_{encoded invitedEmail}</code> — a deterministic key, not a push id. See <code>invitationKey</code> in <a href="services.html">services</a> for the encoding.</p>
         <p><strong>Validation:</strong></p>
         <ul>
-          <li><code>invitedEmail</code> must match <code>/^[^\s@]+@[^\s@]+\.[^\s@]+$/</code>.</li>
-          <li>A second <code>Pending</code> invite to the same email + project is blocked (deduplication checked before write).</li>
+          <li><code>invitedEmail</code> must match <code>/^[^\s@]+@[^\s@]+\.[^\s@]+$/</code>, and is stored lower-case.</li>
+          <li>The key must match the <code>projectId</code> and <code>invitedEmail</code> the record claims — enforced by the security rules, because the membership rule authorises against whatever invitation sits at that key.</li>
+          <li>A second <code>Pending</code> invite to the same email + project is blocked. The check queries <em>this project's</em> invitations (the shape the rules allow a member) rather than searching by address; the deterministic key means a re-invite rewrites the same node either way.</li>
           <li>If the invitee is already a member of the project, the invite is blocked.</li>
-          <li>Accepting sets <code>status → 'Accepted'</code> and adds the user to <code>projects/{id}/members/{uid}</code> as <code>'editor'</code>.</li>
+          <li>Accepting sets <code>status → 'Accepted'</code> and adds the user to <code>projects/{id}/members/{uid}</code> as <code>'editor'</code>. This is the only way to gain access to another user's project: the rules let a user add <strong>themselves</strong> to a project exactly when a <code>Pending</code> invitation exists at the key derived from that project and their own verified email.</li>
           <li>Declining sets <code>status → 'Declined'</code>; the document is not removed.</li>
         </ul>
+        <blockquote><strong>Migration:</strong> invitations created under the previous push-id keys are re-keyed by <code>functions/scripts/migrate-security-backfill.js</code>. Where several exist for one project + address, a <code>Pending</code> one wins, otherwise the most recent; the rest are dropped.</blockquote>
       </section>
 
       <section>

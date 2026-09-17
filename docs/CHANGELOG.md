@@ -2,6 +2,49 @@
 
 A dated history of documentation changes, newest first.
 
+## 2026-09-17 (security rules)
+
+### config.md
+- **Rewritten (§4 security rules):** every row of the access table changed. Documented that rules cascade downward as grants (so a restriction under a permissive ancestor is unreachable), and that access is resolved through project membership. New rows for `users/{uid}/projects/{projectId}`, `projects/{projectId}/name`, `projects/{projectId}/members/{uid}`, `modelXmlData`, `milestoneData` and `invitations`; collection reads are now query-scoped.
+- **Changed:** `window.__E2E_DB__` also exposes `query`, `orderByChild` and `equalTo`.
+- **New test coverage:** `e2e/security-rules.spec.ts` — what the rules deny, plus the full invitation path.
+
+### services.md
+- **Renamed:** `deleteModelsAndInvites(projectId)` → `deleteProjectCascade(projectId, userId)`; now one atomic multi-path update that also removes the project node and the members' reverse-index entries. Dropped the stale "fire-and-forget removes" note.
+- **Changed path:** `saveMilestone` writes `/milestoneData/{milestoneId}` as `{ modelId, xmlData }` (was `/milestoneData/{milestoneId}/xmlData`).
+- **New section (§5 invites.service.tsx):** `encodeEmailKey` and `invitationKey` — the deterministic invitation key and its escaping table.
+- **Corrected:** `invites.service.tsx` is no longer an empty stub; §6 lists only `download.service.tsx`.
+
+### projects.md
+- **New field:** `milestoneData.modelId` (`string`) — the back-reference access is resolved through; RTDB path is now `milestoneData/{milestoneId}`.
+- **Changed key:** `Invitation` lives at `invitations/{projectId}_{encoded invitedEmail}`, not a push id. Documented the key-matches-content rule, the project-scoped duplicate check, and that self-service membership is what an accepted invitation authorises.
+- **New migration notes:** both entities reference `functions/scripts/migrate-security-backfill.js`.
+
+### functions.md
+- **New section (§6):** the security-rules backfill script — what it changes, why, that it must run before the rules are deployed, and its duplicate-resolution rule.
+- **New npm script:** `migrate-security-backfill`.
+- **Changed:** the milestone migration writes `milestoneData/{milestoneId}` with `modelId`.
+
+## 2026-09-17
+
+### components.md
+- **Changed behaviour note:** the BpmnModeler collaboration binding now attaches three helpers instead of two — `CollabBinding`, `CollabDoc`, and a single `IdleDetector` shared by both, so the presence overlay and the shared document step away from and return to the session together.
+- **New E2E hooks:** `window.__E2E_IDLE__` (the activity detector) and `window.__E2E_IDLE_MS__` (threshold override), both guarded by `VITE_FIREBASE_EMULATOR` like `__E2E_BPMN__`.
+- **New behaviour (§7 PresenceBar):** a peer flagged `idle` renders dimmed and greyscaled with a `<name> (away)` title.
+- **Updated engine note:** the collaboration engine list now also names `IdleDetector`.
+
+### config.md
+- **Corrected (§4 security rules):** the `sessions/{modelId}` subtree no longer has `ops` or a shared live `doc` — it is `ydoc` (append-only update `log` + leader-compacted `state`), as of the Yjs rewrite.
+- **New field:** `presence/{uid}/idle` (`boolean`) — set while that user has stepped away from their window.
+- **Updated test coverage:** `e2e/collaboration.spec.ts` also covers the idle tiers (a parked window is flagged away, clears its cursor, gives up the persistence leadership, downloads no peer edits, and catches up on return).
+
+## 2026-09-10
+
+### config.md
+- **New Playwright project:** `demo` (`playwright.config.ts`) — runs only `e2e/demo-vergunningsaanvraag.spec.ts`; the `chromium` project's `testIgnore` now excludes this spec as well as `collaboration.spec.ts`.
+- **New npm script:** `demo` — `firebase emulators:exec ... "playwright test --project=demo"`; runs the four-user live-collaboration demo choreography in four tiled headed windows (env vars `SPEED`, `SCREEN_W`/`SCREEN_H`, `HOLD_MS`; `HEADLESS=1` to hide).
+- **New test coverage:** `e2e/demo-vergunningsaanvraag.spec.ts` — four users collaboratively build a Dutch *vergunningsaanvraag* BPMN process for screen-recording, with concurrent drawing and live remote cursors.
+
 ## 2026-09-05
 
 ### components.md

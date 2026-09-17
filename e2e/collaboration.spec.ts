@@ -351,7 +351,16 @@ interface TwoClients {
     cleanup: () => Promise<void>;
 }
 
-async function openTwoClients(): Promise<TwoClients> {
+interface TwoClientOptions {
+    /**
+     * Runs against both pages before anything navigates — the only point where
+     * `addInitScript` still reaches the app's first load, and where a byte meter
+     * still catches the database WebSocket being opened.
+     */
+    beforeLoad?: (pageA: Page, pageB: Page) => Promise<void>;
+}
+
+async function openTwoClients(options: TwoClientOptions = {}): Promise<TwoClients> {
     const browserA = await chromium.launch({ headless: HEADLESS });
     const browserB = await chromium.launch({ headless: HEADLESS });
     const ctxA = await browserA.newContext({ baseURL: BASE_URL });
@@ -374,6 +383,8 @@ async function openTwoClients(): Promise<TwoClients> {
     };
 
     try {
+        await options.beforeLoad?.(pageA, pageB);
+
         const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
         const alice: TestUser = { email: `alice-${stamp}@example.com`, password: 'test-password-123' };
         const bob: TestUser = { email: `bob-${stamp}@example.com`, password: 'test-password-123' };
@@ -656,6 +667,99 @@ test('concurrent edits to different elements all survive (CRDT merge)', async ()
         // Both clients converged to the same element set.
         const [countA, countB] = await Promise.all([elementCount(pageA), elementCount(pageB)]);
         expect(countB, 'both clients hold the same number of elements').toBe(countA);
+    } finally {
+        await cleanup();
+    }
+});
+
+test('a parked window stops costing the session, and catches up on return', async () => {
+    test.setTimeout(180_000);
+
+    // Only B parks. Its tiers are shortened to seconds; A keeps the production
+    // thresholds, and its own edits count as activity, so A never steps away.
+    const IDLE_AFTER_MS = 1_500;
+    const AWAY_AFTER_MS = 3_000;
+
+    const meters: Meter[] = [];
+    const { pageA, pageB, modelId, cleanup } = await openTwoClients({
+        beforeLoad: async (_a, b) => {
+            meters.push(attachMeter(b));
+            await b.addInitScript((ms) => {
+                (window as any).__E2E_IDLE_MS__ = ms;
+            }, { idleAfterMs: IDLE_AFTER_MS, awayAfterMs: AWAY_AFTER_MS, hiddenAwayMs: AWAY_AFTER_MS });
+        },
+    });
+    const meter = meters[0];
+
+    const readDb = (page: Page, path: string) => page.evaluate((p) => {
+        const { getDatabase, ref, get } = (window as any).__E2E_DB__;
+        return get(ref(getDatabase(), p)).then((s: any) => s.val());
+    }, path);
+
+    try {
+        const uidB = await getUid(pageB);
+
+        // --- while B is working, everything flows -----------------------------
+        const box = await pageB.locator('.bpmn-modeler .djs-container').boundingBox();
+        if (!box) throw new Error('no canvas on B');
+        await pageB.mouse.move(box.x + 200, box.y + 200);
+        await expect
+            .poll(() => readDb(pageA, `sessions/${modelId}/cursors/${uidB}`), { timeout: 15_000 })
+            .not.toBeNull();
+
+        await addNamedTask(pageA, 'Before the pause', 300, 200);
+        await expect.poll(() => taskNames(pageB), { timeout: 25_000 }).toContain('Before the pause');
+        const baseline = await elementCount(pageB);
+
+        // --- B is left alone --------------------------------------------------
+        await pageB.waitForFunction(() => (window as any).__E2E_IDLE__?.current === 'away', undefined,
+            { timeout: 20_000 });
+
+        // Presence says away, and B's cursor is off everyone's canvas.
+        await expect
+            .poll(() => readDb(pageA, `sessions/${modelId}/presence/${uidB}/idle`), { timeout: 15_000 })
+            .toBe(true);
+        await expect
+            .poll(() => readDb(pageA, `sessions/${modelId}/cursors/${uidB}`), { timeout: 15_000 })
+            .toBeNull();
+
+        // --- A works on; B must not pay for it --------------------------------
+        const recvBefore = meter.recv;
+        for (let i = 0; i < 6; i++) {
+            await addNamedTask(pageA, `During the pause ${i}`, 300 + i * 140, 340);
+            await pageA.waitForTimeout(600);
+        }
+        await pageA.waitForTimeout(2_000);
+        const parkedRecv = meter.recv - recvBefore;
+
+        // The real assertion: B did not follow the edits at all.
+        expect(await elementCount(pageB), 'a parked window stops applying peer edits')
+            .toBe(baseline);
+        // And it downloaded next to nothing while they happened — WebSocket
+        // keepalives only, orders of magnitude below the ~1 KB per edit an
+        // attached client pays. Generous, to stay robust in CI.
+        expect(parkedRecv, 'a parked window downloads no edit traffic').toBeLessThan(2_048);
+
+        // B is no longer the persistence leader — whoever is awake owns it.
+        const leader = await readDb(pageA, `sessions/${modelId}/leader`);
+        expect(leader?.uid, 'a parked window does not hold the persistence leadership')
+            .not.toBe(uidB);
+
+        // --- one mouse move brings B back -------------------------------------
+        await pageB.mouse.move(box.x + 240, box.y + 240);
+        await pageB.waitForFunction(() => (window as any).__E2E_IDLE__?.current === 'active', undefined,
+            { timeout: 10_000 });
+        await expect
+            .poll(() => readDb(pageA, `sessions/${modelId}/presence/${uidB}/idle`), { timeout: 15_000 })
+            .toBe(false);
+
+        // Everything it missed arrives, and it can edit into the session again.
+        await expect.poll(() => elementCount(pageB), { timeout: 30_000 })
+            .toBe(await elementCount(pageA));
+        await expect.poll(() => taskNames(pageB), { timeout: 30_000 }).toContain('During the pause 5');
+
+        await addNamedTask(pageB, 'After the pause', 300, 480);
+        await expect.poll(() => taskNames(pageA), { timeout: 25_000 }).toContain('After the pause');
     } finally {
         await cleanup();
     }

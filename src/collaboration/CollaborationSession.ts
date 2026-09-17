@@ -54,9 +54,13 @@ export interface SharedState {
  *     `this.identity.uid`.
  *   - Departure is handled by `onDisconnect().remove()` so a crashed tab does
  *     not leave a ghost cursor behind; `leave()` also cancels those handlers.
+ *   - Every subscription here can be detached individually, so a window whose
+ *     user has stepped away can drop the expensive streams (the shared log,
+ *     peer cursors and selections) and stop being a fan-out target for the
+ *     people still working — see {@link IdleDetector} and its two consumers.
  *
- * Throttling of cursor writes and idle-stop live in the calling hook (Phase 1),
- * not here — this class stays a thin, testable I/O boundary.
+ * Throttling of cursor writes, and deciding *when* a window is idle, live in the
+ * callers — this class stays a thin, testable I/O boundary.
  */
 export class CollaborationSession {
     /** The model this session belongs to (used by the persistence leader). */
@@ -70,6 +74,8 @@ export class CollaborationSession {
     private readonly selectionSelfRef: DatabaseReference;
     private readonly viewportSelfRef: DatabaseReference;
     private readonly leaderRef: DatabaseReference;
+    /** The whole shared-document subtree: `sessions/{modelId}/ydoc`. */
+    private readonly docRef: DatabaseReference;
     /** The shared, append-only Yjs update log: `sessions/{modelId}/ydoc/log`. */
     private readonly logRef: DatabaseReference;
     private readonly stateRef: DatabaseReference;
@@ -78,6 +84,7 @@ export class CollaborationSession {
     private joined = false;
 
     private isLeaderNow = false;
+    private leadershipSuspended = false;
     private readonly leadershipListeners = new Set<(isLeader: boolean) => void>();
 
     constructor(
@@ -91,6 +98,7 @@ export class CollaborationSession {
         this.selectionSelfRef = ref(this.db, `${this.base}/selections/${identity.uid}`);
         this.viewportSelfRef = ref(this.db, `${this.base}/viewports/${identity.uid}`);
         this.leaderRef = ref(this.db, `${this.base}/leader`);
+        this.docRef = ref(this.db, `${this.base}/ydoc`);
         this.logRef = ref(this.db, `${this.base}/ydoc/log`);
         this.stateRef = ref(this.db, `${this.base}/ydoc/state`);
     }
@@ -98,6 +106,20 @@ export class CollaborationSession {
     /** This user's uid — used to filter out our own echoed document writes. */
     get uid(): string {
         return this.identity.uid;
+    }
+
+    /**
+     * Register a subscription so `leave()` detaches it, and hand back an
+     * unsubscribe that also *deregisters* it. Subscriptions that come and go
+     * with the window's activity state would otherwise pile up in the list.
+     */
+    private track(unsub: Unsubscribe): Unsubscribe {
+        this.subscriptions.push(unsub);
+        return () => {
+            const i = this.subscriptions.indexOf(unsub);
+            if (i !== -1) this.subscriptions.splice(i, 1);
+            unsub();
+        };
     }
 
     /** Whether this client is currently the persistence leader. */
@@ -181,6 +203,7 @@ export class CollaborationSession {
                 this.tryClaimLeadership();
                 return;
             }
+            if (this.leadershipSuspended) return;
             const wasLeader = this.isLeaderNow;
             this.isLeaderNow = value.uid === this.identity.uid;
             if (this.isLeaderNow && !wasLeader) {
@@ -193,6 +216,7 @@ export class CollaborationSession {
     }
 
     private tryClaimLeadership(): void {
+        if (this.leadershipSuspended || !this.joined) return;
         runTransaction(this.leaderRef, (current) => {
             if (current === null) return { uid: this.identity.uid, ts: Date.now() };
             return undefined; // someone else holds it — abort
@@ -208,6 +232,33 @@ export class CollaborationSession {
         this.leadershipListeners.add(callback);
         callback(this.isLeaderNow);
         return () => this.leadershipListeners.delete(callback);
+    }
+
+    /**
+     * Step down as persistence leader and stop standing for election, so a
+     * window whose user has walked away does not keep writing the shared
+     * document back to `modelXmlData` on behalf of the people still editing.
+     * Releasing the node lets an active client claim it immediately.
+     */
+    async suspendLeadership(): Promise<void> {
+        if (this.leadershipSuspended) return;
+        this.leadershipSuspended = true;
+        if (!this.isLeaderNow) return;
+        // Announce the step-down before the write lands: the moment we intend to
+        // stop persisting is the moment our callers must stop scheduling writes.
+        this.isLeaderNow = false;
+        this.emitLeadership();
+        await onDisconnect(this.leaderRef).cancel().catch(() => {});
+        await remove(this.leaderRef).catch(() => {});
+    }
+
+    /** Stand for election again after {@link suspendLeadership}. */
+    resumeLeadership(): void {
+        if (!this.leadershipSuspended) return;
+        this.leadershipSuspended = false;
+        // Claim it if it is free right now; if someone else took over while we
+        // were away, the `leader` listener offers it back when they leave.
+        this.tryClaimLeadership();
     }
 
     // --- shared document (Yjs) -----------------------------------------------
@@ -238,13 +289,11 @@ export class CollaborationSession {
      * id, so the leader can prune everything up to the last one it has applied.
      */
     subscribeUpdates(onUpdate: (bytes: Uint8Array, key: string) => void): Unsubscribe {
-        const unsub = onChildAdded(this.logRef, (child) => {
+        return this.track(onChildAdded(this.logRef, (child) => {
             const v = child.val() as { u?: string } | null;
             if (!v || typeof v.u !== 'string' || !child.key) return;
             onUpdate(base64ToGunzipBytes(v.u), child.key);
-        });
-        this.subscriptions.push(unsub);
-        return unsub;
+        }));
     }
 
     /**
@@ -255,6 +304,16 @@ export class CollaborationSession {
     publishState(bytes: Uint8Array, v: number): Promise<number> {
         const u = gzipBytesToBase64(bytes);
         return set(this.stateRef, { u, v, t: serverTimestamp() }).then(() => u.length);
+    }
+
+    /**
+     * Drop the whole shared document — the compacted state and the update log.
+     * Used when a client opens a model nobody else is in: whatever is stored then
+     * is the residue of a session that has ended, and the saved model is the
+     * source of truth (see {@link CollabDoc}'s initialise).
+     */
+    clearDocument(): Promise<void> {
+        return remove(this.docRef);
     }
 
     /** Read the current compacted state, or null if none has been published. */
@@ -312,9 +371,14 @@ export class CollaborationSession {
         return set(this.viewportSelfRef, { ...v, t: Date.now() } satisfies ViewportPayload);
     }
 
-    /** Bump `lastActive` without rewriting the whole presence node. */
-    touch(): Promise<void> {
-        return update(this.presenceSelfRef, { lastActive: serverTimestamp() });
+    /**
+     * Flag whether this user has stepped away, bumping `lastActive` at the same
+     * time — a single small write on the presence node (never the whole node),
+     * and the only write an idle window makes. Peers render an idle collaborator
+     * dimmed instead of showing them as actively editing.
+     */
+    setIdle(idle: boolean): Promise<void> {
+        return update(this.presenceSelfRef, { idle, lastActive: serverTimestamp() });
     }
 
     // --- incoming (other users) ----------------------------------------------
@@ -360,9 +424,7 @@ export class CollaborationSession {
                 onRemove(uid);
             }),
         ];
-        const unsub: Unsubscribe = () => unsubs.forEach((u) => u());
-        this.subscriptions.push(unsub);
-        return unsub;
+        return this.track(() => unsubs.forEach((u) => u()));
     }
 
     /**
@@ -388,8 +450,6 @@ export class CollaborationSession {
                 onRemove(uid);
             }),
         ];
-        const unsub: Unsubscribe = () => unsubs.forEach((u) => u());
-        this.subscriptions.push(unsub);
-        return unsub;
+        return this.track(() => unsubs.forEach((u) => u()));
     }
 }

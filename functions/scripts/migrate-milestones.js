@@ -93,8 +93,9 @@ async function main() {
         createdBy: createdBy ?? null,
         createdAt: createdAt ?? null,
       };
-      // XML snapshot on its own, keyed by the same milestone id.
-      updates[`milestoneData/${milestoneId}/xmlData`] = xmlData ?? null;
+      // XML snapshot on its own, keyed by the same milestone id. `modelId` is the
+      // back-reference the security rules resolve access through.
+      updates[`milestoneData/${milestoneId}`] = xmlData ? { modelId, xmlData } : null;
 
       milestoneCount += 1;
     }

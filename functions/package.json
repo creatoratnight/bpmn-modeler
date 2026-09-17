@@ -10,6 +10,8 @@
     "pretest": "npm run sync-config",
     "test": "jest",
     "migrate-milestones": "node scripts/migrate-milestones.js",
+    "migrate-security-backfill": "node scripts/migrate-security-backfill.js",
+    "migrate-export-file": "node scripts/migrate-export-file.js",
     "deploy": "node scripts/deploy.js"
   },
   "engines": {

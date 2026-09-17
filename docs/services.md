@@ -2,7 +2,7 @@
 
 ## Context
 
-The `src/services/` directory contains every function that communicates with Firebase Realtime Database, Firebase Authentication, and the Microsoft Graph API, plus a set of pure browser-side helpers. React components import from these files rather than calling Firebase or browser APIs directly. Two files (`download.service.tsx`, `invites.service.tsx`) exist in the directory but are empty stubs with no exports.
+The `src/services/` directory contains every function that communicates with Firebase Realtime Database, Firebase Authentication, and the Microsoft Graph API, plus a set of pure browser-side helpers. React components import from these files rather than calling Firebase or browser APIs directly. One file (`download.service.tsx`) exists in the directory but is an empty stub with no exports.
 
 ---
 
@@ -77,9 +77,11 @@ Generates a milestone ID (`push(ref(db, 'milestoneData')).key`) and writes the m
 | RTDB path | Fields written |
 |-----------|----------------|
 | `/bpmnModels/{modelId}/milestones/{milestoneId}` | `name`, `description`, `createdBy: userId`, `createdAt` |
-| `/milestoneData/{milestoneId}/xmlData` | `xmlData` |
+| `/milestoneData/{milestoneId}` | `modelId`, `xmlData` |
 
 Returns `Promise<string>` — the generated `milestoneId`.
+
+> `modelId` is the back-reference the security rules resolve access through: a snapshot keyed only by its own id cannot be tied to a project.
 
 ---
 
@@ -188,19 +190,22 @@ Cascade-delete helper invoked when a project is permanently deleted.
 
 **Source:** `src/services/projects.service.tsx`
 
-### deleteModelsAndInvites(projectId)
+### deleteProjectCascade(projectId, userId)
 
-Deletes all models, XML data, milestones, and invitations belonging to a project.
+Deletes a project and everything hanging off it — models, XML data, milestone snapshots and invitations — as a **single atomic multi-path update**.
 
-| Step | RTDB query | Removals per matched key |
-|------|-----------|--------------------------|
-| 1 | `bpmnModels` where `projectId == projectId` | `bpmnModels/{key}` (includes the model's milestone metadata child), `modelXmlData/{key}`, `milestones/{key}` (legacy pre-migration layout), and `milestoneData/{milestoneId}` for each milestone under the model |
-| 2 | `invitations` where `projectId == projectId` | `invitations/{key}` |
+| Step | RTDB query | Paths collected |
+|------|-----------|-----------------|
+| 1 | `projects/{projectId}` (read) | the member list, for clearing the reverse index |
+| 2 | `bpmnModels` where `projectId == projectId` | `bpmnModels/{key}` (includes the model's milestone metadata child), `modelXmlData/{key}`, `milestones/{key}` (legacy pre-migration layout), and `milestoneData/{milestoneId}` for each milestone under the model |
+| 3 | `invitations` where `projectId == projectId` | `invitations/{key}` |
+| 4 | — | `users/{memberId}/projects/{projectId}` (every member when the caller is the owner, otherwise only their own) and finally `projects/{projectId}` |
 
 **Validation / edge cases:**
-- The milestone XML snapshots (`milestoneData/{milestoneId}`) live outside the model node, so they are removed explicitly using the milestone IDs read from each model's `milestones` child.
+- Order and atomicity are load-bearing. Access to a model is resolved through its project and to XML/snapshots through their model, so deleting a parent before its dependants would leave them unreachable *and* make the security rules refuse the deletes that clean them up. One update authorises every path against the state before it, while the chain is still intact.
+- The milestone XML snapshots (`milestoneData/{milestoneId}`) live outside the model node, so they are collected explicitly using the milestone IDs read from each model's `milestones` child.
 - `comments/{key}` is **not** removed — comments are not cleaned up on project deletion.
-- Individual `remove` calls inside the `forEach` are fire-and-forget (no `await`); the returned promise resolves when the queries complete, not when all removes do.
+- Only the owner may clear *other* members' index entries (the rules allow exactly that); a non-owner member deleting a project clears only their own.
 
 ---
 
@@ -278,14 +283,43 @@ Triggers a file download in the browser.
 
 ---
 
-## 5. Empty stubs
+## 5. invites.service.tsx
 
-Two service files in `src/services/` contain no code:
+Derives the database key of an invitation. Invitations are keyed deterministically by project + invited address rather than by a push id, because the security rules must be able to *find* the invitation that authorises a user to add themselves to a project's members — and rules cannot search, so the key has to be derivable from the project id and `auth.token.email`. A deterministic key also makes inviting idempotent, which removes any need to read other people's invitations to check for a duplicate.
+
+**Source:** `src/services/invites.service.tsx`
+
+### encodeEmailKey(email): string
+
+Lower-cases the address and escapes every character the Realtime Database forbids in a key, in this order:
+
+| Character | Escaped as |
+|-----------|-----------|
+| `%` | `%25` |
+| `.` | `,` |
+| `#` | `%23` |
+| `$` | `%24` |
+| `[` | `%5B` |
+| `]` | `%5D` |
+| `/` | `%2F` |
+
+`%` is escaped first so the mapping stays injective — otherwise `a%23b@x` and `a#b@x` would collide, and a collision would hand one address the invitation belonging to another.
+
+### invitationKey(projectId, email): string
+
+Returns `` `${projectId}_${encodeEmailKey(email)}` ``.
+
+> This escaping is mirrored by the `.replace()` chains in `database.rules.json` and by `functions/scripts/migrate-security-backfill.js`. All three must change together.
+
+---
+
+## 6. Empty stubs
+
+One service file in `src/services/` contains no code:
 
 | File | Status |
 |------|--------|
 | `src/services/download.service.tsx` | Empty — no exports |
-| `src/services/invites.service.tsx` | Empty — no exports |
 
 ---
 
@@ -297,6 +331,8 @@ flowchart TD
     A --> C[user.service.tsx]
     A --> D[projects.service.tsx]
     A --> E[utils.service.tsx]
+    A --> M[invites.service.tsx]
+    M -->|derives key| N["invitations/{projectId}_{encoded email}"]
 
     B -->|RTDB update| F["/bpmnModels/{id}\n/modelXmlData/{id}"]
     B -->|RTDB update/get| G["bpmnModels/{modelId}/milestones\nmilestoneData/{milestoneId}"]

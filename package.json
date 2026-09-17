@@ -14,6 +14,7 @@
     "test:e2e:ui": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=chromium --ui\"",
     "test:e2e:report": "playwright show-report",
     "test:collab": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=collab\"",
+    "demo": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=demo\"",
     "screenshots": "firebase emulators:exec --only auth,database --project demo-bpmn \"playwright test --project=screenshots\""
   },
   "dependencies": {

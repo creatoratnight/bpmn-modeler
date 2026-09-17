@@ -111,6 +111,7 @@
             <tr><td><code>npm run emulate</code></td><td>Runs <code>sync-config</code> then builds and starts the local Firebase Emulator</td></tr>
             <tr><td><code>npm run test</code></td><td>Runs <code>sync-config</code> (to inject env vars) then Jest</td></tr>
             <tr><td><code>npm run migrate-milestones</code></td><td>Runs the milestone data migration (see section 5)</td></tr>
+            <tr><td><code>npm run migrate-security-backfill</code></td><td>Runs the security-rules backfill (see section 6)</td></tr>
           </tbody>
         </table></div>
         <p><strong>Source:</strong> <code>functions/scripts/deploy.js</code>, <code>functions/scripts/sync-config.js</code>, <code>functions/scripts/start-emulator.js</code></p>
@@ -123,7 +124,7 @@
           <thead><tr><th>Path</th><th>Contents</th></tr></thead>
           <tbody>
             <tr><td><code>bpmnModels/{modelId}/milestones/{milestoneId}</code></td><td>Metadata: <code>name</code>, <code>description</code>, <code>createdBy</code>, <code>createdAt</code></td></tr>
-            <tr><td><code>milestoneData/{milestoneId}/xmlData</code></td><td>The XML snapshot, keyed by the same milestone ID</td></tr>
+            <tr><td><code>milestoneData/{milestoneId}</code></td><td><code>modelId</code> + the XML snapshot, keyed by the same milestone ID</td></tr>
           </tbody>
         </table></div>
         <p><strong>Source:</strong> <code>functions/scripts/migrate-milestones.js</code></p>
@@ -137,6 +138,34 @@
           <tbody>
             <tr><td><code>--dry-run</code></td><td>Report the paths that would be written/deleted without writing anything.</td></tr>
             <tr><td><code>--keep-legacy</code></td><td>Leave the old <code>milestones/</code> node in place (default deletes it after copying).</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section>
+        <h2>6. Security-rules backfill</h2>
+        <p>A one-off migration for data that predates what the tightened security rules resolve access through. Without it, that data is unreachable — the rules cannot authorise what they cannot resolve.</p>
+        <p><strong>Source:</strong> <code>functions/scripts/migrate-security-backfill.js</code></p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Step</th><th>Change</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>milestoneData/{milestoneId}</code> gains <code>modelId</code>, recovered from <code>bpmnModels/{modelId}/milestones</code></td><td>A snapshot keyed by its own id alone cannot be tied to a project.</td></tr>
+            <tr><td>2</td><td>Invitations move from push ids to <code>{projectId}_{encoded email}</code></td><td>Accepting an invitation adds you to a project's members, and the rules must find the invitation that authorises it. Rules cannot search, so the key has to be derivable from the project and <code>auth.token.email</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <ul>
+          <li>Uses <code>firebase-admin</code>; <code>projectId</code> / <code>databaseURL</code> are read from <code>src/config/.firebase.js</code> via <code>read-firebase-config.js</code>.</li>
+          <li><strong>Target:</strong> same as section 5 — <code>FIREBASE_DATABASE_EMULATOR_HOST</code> for the emulator, otherwise Application Default Credentials.</li>
+          <li><strong>Run it before deploying the rules.</strong> It only adds and re-keys data, so it is safe against the old rules and leaves the database ready for the new ones.</li>
+          <li><strong>Idempotent:</strong> a re-run finds nothing left to do.</li>
+          <li>Snapshots belonging to no model are reported and left untouched — they were already unreachable through the app.</li>
+          <li>Where several invitations exist for one project + address, a <code>Pending</code> one wins, otherwise the most recent; the rest are deleted as duplicates.</li>
+          <li>The email escaping mirrors <code>src/services/invites.service.tsx</code> and the <code>.replace()</code> chains in <code>database.rules.json</code>; all three must change together.</li>
+        </ul>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>--dry-run</code></td><td>Report the paths that would be written/deleted without writing anything.</td></tr>
           </tbody>
         </table></div>
       </section>
@@ -186,6 +215,7 @@ flowchart TD
           <li><code>functions/scripts/sync-config.js</code></li>
           <li><code>functions/scripts/start-emulator.js</code></li>
           <li><code>functions/scripts/migrate-milestones.js</code></li>
+          <li><code>functions/scripts/migrate-security-backfill.js</code></li>
           <li><code>functions/jest.setup.js</code></li>
         </ul>
       </section>

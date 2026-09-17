@@ -34,9 +34,10 @@ export default defineConfig({
     {
       name: 'chromium',
       // The default testMatch (*.spec.ts) excludes the *.shots.ts capture file.
-      // The collaboration test manages its own (headed, multi-window) browsers
-      // and is heavy, so it is opt-in via `npm run test:collab`, not the default run.
-      testIgnore: '**/collaboration.spec.ts',
+      // The collaboration test and the demo choreography manage their own (headed,
+      // multi-window) browsers and are heavy/opt-in, so they are excluded from the
+      // default run (see `npm run test:collab` / `npm run demo`).
+      testIgnore: ['**/collaboration.spec.ts', '**/demo-vergunningsaanvraag.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
     },
 
@@ -48,6 +49,14 @@ export default defineConfig({
       testMatch: '**/collaboration.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
+    // Four-user demo choreography for screen-recording a live-collaboration video.
+    // Launches its own four tiled, headed windows. Run via `npm run demo`.
+    {
+      name: 'demo',
+      testMatch: '**/demo-vergunningsaanvraag.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+
     // Uncomment to test other browsers (run `npx playwright install firefox webkit` first).
     // { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     // { name: 'webkit', use: { ...devices['Desktop Safari'] } },

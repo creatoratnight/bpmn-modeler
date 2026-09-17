@@ -1,4 +1,5 @@
 import type { CollaborationSession } from './CollaborationSession';
+import type { ActivityState, IdleDetector } from './IdleDetector';
 import type { CursorPayload, Peer, SelectionPayload } from './types';
 
 // How often we publish our own cursor while the pointer is moving. ~15/s is
@@ -74,6 +75,15 @@ interface Modeler {
  * and mounts/unmounts this binding. Everything is drawn in **diagram
  * coordinates** and re-projected through the local viewbox every frame, so peers
  * stay correctly placed no matter how each person has panned or zoomed.
+ *
+ * Presence traffic is the most expensive channel in the session, so it follows
+ * the window's activity state ({@link IdleDetector}):
+ *   - `idle` — we stop publishing our own cursor and selection, and take our
+ *     cursor off everyone else's canvas.
+ *   - `away` — we additionally unsubscribe from peer cursors and selections, so
+ *     a parked window stops downloading ~15 cursor updates a second from every
+ *     peer who *is* working. Peer presence stays subscribed (it is small and
+ *     low-churn) and the streams re-attach on the first sign of activity.
  */
 export class CollabBinding {
     private readonly canvas: DiagramCanvas;
@@ -87,8 +97,15 @@ export class CollabBinding {
     private readonly identities = new Map<string, Peer>();
 
     private readonly unsubscribes: Array<() => void> = [];
+    /** Peer cursor/selection subscriptions — detached while `away`, else non-null. */
+    private peerSubs: Array<() => void> | null = null;
     private rafId: number | null = null;
     private stopped = false;
+
+    /** Latest activity state; we only publish while it is `active`. */
+    private activity: ActivityState = 'active';
+    /** Last `idle` flag written to presence — `join()` publishes us as active. */
+    private publishedIdle = false;
 
     // Cursor send throttling.
     private lastClient: { x: number; y: number } | null = null;
@@ -98,6 +115,7 @@ export class CollabBinding {
     constructor(
         modeler: Modeler,
         private readonly session: CollaborationSession,
+        private readonly idle: IdleDetector,
     ) {
         this.canvas = modeler.get('canvas');
         this.eventBus = modeler.get('eventBus');
@@ -115,14 +133,18 @@ export class CollabBinding {
         // Outgoing: our selection.
         this.eventBus.on('selection.changed', this.onSelectionChanged);
 
-        // Incoming: peers.
+        // Incoming: peer identities. Small and low-churn, so this one stays
+        // subscribed even while away — it is what keeps the presence bar honest.
         this.unsubscribes.push(this.session.onPeers(this.onPeers));
-        this.unsubscribes.push(this.session.onCursors(this.onPeerCursor, this.onPeerGone));
-        this.unsubscribes.push(this.session.onSelections(this.onPeerSelection, this.onPeerSelectionCleared));
+
+        // Incoming: cursors and selections, attached only while we are not away.
+        // Fires immediately with the current state, which performs the first attach.
+        this.unsubscribes.push(this.idle.onChange(this.onActivityChange));
     }
 
     stop(): void {
         this.stopped = true;
+        this.detachPeerStreams();
         if (this.trailingTimer) clearTimeout(this.trailingTimer);
         if (this.rafId !== null) cancelAnimationFrame(this.rafId);
 
@@ -163,9 +185,60 @@ export class CollabBinding {
         return { x: (x - vb.x) * scale, y: (y - vb.y) * scale };
     }
 
+    // --- activity ------------------------------------------------------------
+
+    private onActivityChange = (state: ActivityState): void => {
+        if (this.stopped) return;
+        this.activity = state;
+
+        // One small presence write per transition in or out of activity — not
+        // per state — so peers can dim someone who has stepped away.
+        const idle = state !== 'active';
+        if (idle !== this.publishedIdle) {
+            this.publishedIdle = idle;
+            this.session.setIdle(idle).catch(() => {});
+        }
+
+        if (state === 'away') this.detachPeerStreams();
+        else this.attachPeerStreams();
+
+        if (state === 'active') return;
+        // Stepped away: stop the cursor stream and take our cursor off every
+        // peer's canvas, so we neither publish nor linger as a stale pointer.
+        this.lastClient = null;
+        if (this.trailingTimer) { clearTimeout(this.trailingTimer); this.trailingTimer = null; }
+        this.session.clearCursor().catch(() => {});
+    };
+
+    /** Idempotent: subscribing twice would double every peer's cursor updates. */
+    private attachPeerStreams(): void {
+        if (this.peerSubs || this.stopped) return;
+        this.peerSubs = [
+            this.session.onCursors(this.onPeerCursor, this.onPeerGone),
+            this.session.onSelections(this.onPeerSelection, this.onPeerSelectionCleared),
+        ];
+    }
+
+    private detachPeerStreams(): void {
+        if (!this.peerSubs) return;
+        for (const unsub of this.peerSubs.splice(0)) {
+            try { unsub(); } catch { /* already detached */ }
+        }
+        this.peerSubs = null;
+        // Drop what we were rendering: without the streams these views would
+        // freeze mid-motion and go stale. Re-attaching replays the current
+        // cursors and selections, so nothing is lost on the way back.
+        for (const uid of [...this.cursors.keys()]) this.onPeerGone(uid);
+        for (const uid of [...this.selections.keys()]) this.onPeerSelectionCleared(uid);
+    }
+
     // --- outgoing ------------------------------------------------------------
 
     private onMouseMove = (e: MouseEvent): void => {
+        // The detector listens on the document in the capture phase, so a move
+        // that ends a pause has already flipped us back to `active` by the time
+        // this runs — the first move after a pause still publishes.
+        if (this.activity !== 'active') return;
         this.lastClient = { x: e.clientX, y: e.clientY };
         const now = Date.now();
         const elapsed = now - this.lastSentAt;
@@ -180,7 +253,7 @@ export class CollabBinding {
     };
 
     private flushCursor(): void {
-        if (!this.lastClient || this.stopped) return;
+        if (!this.lastClient || this.stopped || this.activity !== 'active') return;
         this.lastSentAt = Date.now();
         const { x, y } = this.toDiagram(this.lastClient.x, this.lastClient.y);
         this.session.setCursor(x, y).catch(() => {});
@@ -193,6 +266,9 @@ export class CollabBinding {
     };
 
     private onSelectionChanged = (event: { newSelection: Array<{ id: string }> }): void => {
+        // A peer's edit can change our selection without us touching anything —
+        // that is their traffic to pay for, not a reason for an idle window to write.
+        if (this.activity !== 'active') return;
         const ids = (event.newSelection || []).map((el) => el.id);
         this.session.setSelection(ids).catch(() => {});
     };
